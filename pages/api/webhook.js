@@ -52,7 +52,6 @@ export default async function handler(req, res) {
     await handleMessage(phone, text)
   }
 
-  // respond AFTER processing is done
   return res.status(200).json({ status: 'ok' })
 }
 
@@ -71,11 +70,16 @@ async function handleMessage(phone, text) {
   if (session.step === TOTAL_STEPS) {
     const dataToSave = { phone, ...session.data, [key]: text }
 
-    await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
+    // save to sheets first
+    const saved = await saveToSheets(dataToSave)
 
-    saveToSheets(dataToSave).catch(err =>
-      console.error('Sheets save failed:', err.message)
-    )
+    if (!saved) {
+      await sendWhatsApp(phone, 'Something went wrong saving your data. Please try again.')
+      return
+    }
+
+    // then confirm to user
+    await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
     return
   }
 
