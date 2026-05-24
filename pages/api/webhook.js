@@ -20,9 +20,9 @@ const TOTAL_STEPS = 3
 export default async function handler(req, res) {
   // verification handshake with 360dialog
   if (req.method === 'GET') {
-    const { 'hub.mode': mode, 'hub.verify_token': token, 'hub.challenge': challenge } = req.query
-    if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-      return res.status(200).send(challenge)
+    const token = req.headers['webhook_verify_token']
+    if (token === process.env.WEBHOOK_VERIFY_TOKEN) {
+      return res.status(200).send('Webhook verified')
     }
     return res.status(403).end()
   }
