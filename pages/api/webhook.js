@@ -1,7 +1,7 @@
 import { validateAnswer } from '../../utils/validate'
 import { sendWhatsApp } from '../../lib/whatsapp'
 import { saveToSheets } from '../../lib/sheets'
-import { getSession, saveSession, clearSession } from '../../lib/firebase'
+import { getSession, saveSession } from '../../lib/firebase'
 import { isAlreadyProcessed } from '../../utils/session'
 
 const QUESTIONS = {
@@ -60,11 +60,13 @@ async function handleMessage(phone, text) {
   const session = await getSession(phone)
   console.log('Session for', phone, ':', JSON.stringify(session))
 
-  // user already completed registration — ignore
+  // already registered — ignore all future messages
   if (session.completed) {
+    console.log('User already completed:', phone)
     return
   }
 
+  // new user — send first question
   if (!session.started) {
     session.started = true
     await saveSession(phone, session)
@@ -89,8 +91,8 @@ async function handleMessage(phone, text) {
       return
     }
 
-    // mark as completed
-    await saveSession(phone, { completed: true })
+    // mark as completed permanently
+    await saveSession(phone, { completed: true, step: TOTAL_STEPS, started: true, data: {} })
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
     return
   }
