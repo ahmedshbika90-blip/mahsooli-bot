@@ -1,12 +1,11 @@
-import { saveToSheets } from '../../lib/sheets'
+function getAuthClient() {
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
+  const key = process.env.GOOGLE_PRIVATE_KEY
 
-export default async function handler(req, res) {
-  const result = await saveToSheets({
-    phone: '249916406516',
-    name: 'Test Name',
-    phone_number: '0501234567',
-    email: 'test@test.com'
-  })
+  console.log('Email:', email)
+  console.log('Key length:', key?.length)
+  console.log('Key start:', key?.substring(0, 50))
+  console.log('Key end:', key?.substring(key.length - 50))
 
-  res.status(200).json({ success: result })
+  return new google.auth.JWT(email, null, key, SCOPES)
 }
