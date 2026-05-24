@@ -18,7 +18,6 @@ const ANSWER_KEYS = {
 const TOTAL_STEPS = 3
 
 export default async function handler(req, res) {
-  // verification handshake with 360dialog
   if (req.method === 'GET') {
     const token = req.headers['webhook_verify_token']
     if (token === process.env.WEBHOOK_VERIFY_TOKEN) {
@@ -29,12 +28,10 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).end()
 
-  // acknowledge 360dialog immediately
   res.status(200).json({ status: 'ok' })
 
   console.log('BODY:', JSON.stringify(req.body))
 
-  // v2 payload structure
   const entry = req.body?.entry?.[0]
   const changes = entry?.changes?.[0]
   const messages = changes?.value?.messages
@@ -47,10 +44,8 @@ export default async function handler(req, res) {
   for (const message of messages) {
     const phone = message.from
 
-    // skip duplicates
     if (isAlreadyProcessed(message.id)) continue
 
-    // only handle text messages
     if (message.type !== 'text') {
       await sendWhatsApp(phone, 'Please reply with a text message only.')
       continue
@@ -66,35 +61,29 @@ export default async function handler(req, res) {
 async function handleMessage(phone, text) {
   const session = getSession(phone)
 
-  // validate the answer
   const error = validateAnswer(session.step, text)
   if (error) {
     await sendWhatsApp(phone, error)
     return
   }
 
-  // save the answer to session
   const key = ANSWER_KEYS[session.step]
   saveAnswer(phone, key, text)
 
-  // last step — save everything to Sheets
   if (session.step === TOTAL_STEPS) {
-    const saved = await saveToSheets({
-      phone,
-      ...session.data,
-      [key]: text
-    })
+    const dataToSave = { phone, ...session.data, [key]: text }
 
-    if (!saved) {
-      await sendWhatsApp(phone, 'Something went wrong. Please try again.')
-      return
-    }
-
+    // send confirmation immediately
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
+
+    // save to sheets in background — don't block
+    saveToSheets(dataToSave).catch(err =>
+      console.error('Sheets save failed:', err.message)
+    )
     return
   }
 
-  // advance to next step and ask next question
+  // advance and send next question
   advanceStep(phone)
   const nextSession = getSession(phone)
   await sendWhatsApp(phone, QUESTIONS[nextSession.step])
