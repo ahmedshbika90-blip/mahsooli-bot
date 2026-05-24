@@ -1,7 +1,7 @@
-import { getSession, advanceStep, saveAnswer, isAlreadyProcessed } from '../../utils/session'
 import { validateAnswer } from '../../utils/validate'
 import { sendWhatsApp } from '../../lib/whatsapp'
-import { saveToSheets } from '../../lib/sheets'
+import { getSession, saveSession, saveToSheets } from '../../lib/sheets'
+import { isAlreadyProcessed } from '../../utils/session'
 
 const QUESTIONS = {
   1: 'What is your full name?',
@@ -56,11 +56,12 @@ export default async function handler(req, res) {
 }
 
 async function handleMessage(phone, text) {
-  const session = getSession(phone)
+  const session = await getSession(phone)
 
-  // new user — send the first question
+  // new user — send first question
   if (!session.started) {
     session.started = true
+    await saveSession(phone, session)
     await sendWhatsApp(phone, QUESTIONS[1])
     return
   }
@@ -72,23 +73,26 @@ async function handleMessage(phone, text) {
   }
 
   const key = ANSWER_KEYS[session.step]
-  saveAnswer(phone, key, text)
+  session.data[key] = text
 
   if (session.step === TOTAL_STEPS) {
-    const dataToSave = { phone, ...session.data, [key]: text }
-
-    const saved = await saveToSheets(dataToSave)
+    const saved = await saveToSheets({
+      phone,
+      ...session.data
+    })
 
     if (!saved) {
-      await sendWhatsApp(phone, 'Something went wrong saving your data. Please try again.')
+      await sendWhatsApp(phone, 'Something went wrong. Please try again.')
       return
     }
 
+    // clear session after completion
+    await saveSession(phone, { step: 1, started: false, data: {} })
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
     return
   }
 
-  advanceStep(phone)
-  const nextSession = getSession(phone)
-  await sendWhatsApp(phone, QUESTIONS[nextSession.step])
+  session.step++
+  await saveSession(phone, session)
+  await sendWhatsApp(phone, QUESTIONS[session.step])
 }
