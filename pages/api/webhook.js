@@ -57,21 +57,18 @@ export default async function handler(req, res) {
 
 async function handleMessage(phone, text) {
   const session = await getSession(phone)
+  
+  console.log('Session for', phone, ':', JSON.stringify(session))
 
   // new user — send first question
   if (!session.started) {
     session.started = true
     await saveSession(phone, session)
+    console.log('Saved new session:', JSON.stringify(session))
     await sendWhatsApp(phone, QUESTIONS[1])
     return
   }
-
-  const error = validateAnswer(session.step, text)
-  if (error) {
-    await sendWhatsApp(phone, error)
-    return
-  }
-
+  // ... rest stays the same
   const key = ANSWER_KEYS[session.step]
   session.data[key] = text
 
