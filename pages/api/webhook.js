@@ -60,6 +60,11 @@ async function handleMessage(phone, text) {
   const session = await getSession(phone)
   console.log('Session for', phone, ':', JSON.stringify(session))
 
+  // user already completed registration — ignore
+  if (session.completed) {
+    return
+  }
+
   if (!session.started) {
     session.started = true
     await saveSession(phone, session)
@@ -84,7 +89,8 @@ async function handleMessage(phone, text) {
       return
     }
 
-    await clearSession(phone)
+    // mark as completed
+    await saveSession(phone, { completed: true })
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
     return
   }
