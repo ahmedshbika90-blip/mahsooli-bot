@@ -2,20 +2,13 @@ import { google } from 'googleapis'
 
 export default async function handler(req, res) {
   try {
-    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
-    const key = process.env.GOOGLE_PRIVATE_KEY
-
-    console.log('Email:', email)
-    console.log('Key length:', key?.length)
-    console.log('Key start:', key?.substring(0, 50))
-    console.log('Key end:', key?.substring(key.length - 50))
-
-    const auth = new google.auth.JWT(
-      email,
-      null,
-      key,
-      ['https://www.googleapis.com/auth/spreadsheets']
-    )
+    const auth = new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY,
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    })
 
     const sheets = google.sheets({ version: 'v4', auth })
 
