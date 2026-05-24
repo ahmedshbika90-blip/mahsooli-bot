@@ -1,6 +1,7 @@
 import { validateAnswer } from '../../utils/validate'
 import { sendWhatsApp } from '../../lib/whatsapp'
-import { getSession, saveSession, saveToSheets } from '../../lib/sheets'
+import { saveToSheets } from '../../lib/sheets'
+import { getSession, saveSession, clearSession } from '../../lib/firebase'
 import { isAlreadyProcessed } from '../../utils/session'
 
 const QUESTIONS = {
@@ -36,7 +37,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: 'ok' })
   }
 
-  // process messages one by one — no parallelism
   for (const message of messages) {
     const phone = message.from
 
@@ -50,7 +50,6 @@ export default async function handler(req, res) {
     const text = message.text.body.trim()
     if (!text) continue
 
-    // sequential: read session → process → save session → reply
     await handleMessage(phone, text)
   }
 
@@ -58,30 +57,25 @@ export default async function handler(req, res) {
 }
 
 async function handleMessage(phone, text) {
-  // step 1: read session from sheets
   const session = await getSession(phone)
   console.log('Session for', phone, ':', JSON.stringify(session))
 
-  // step 2: new user — send first question and save
   if (!session.started) {
     session.started = true
-    await saveSession(phone, session)  // save first
-    await sendWhatsApp(phone, QUESTIONS[1])  // then reply
+    await saveSession(phone, session)
+    await sendWhatsApp(phone, QUESTIONS[1])
     return
   }
 
-  // step 3: validate answer
   const error = validateAnswer(session.step, text)
   if (error) {
     await sendWhatsApp(phone, error)
     return
   }
 
-  // step 4: save answer to session data
   const key = ANSWER_KEYS[session.step]
   session.data[key] = text
 
-  // step 5: last step — save registration and clear session
   if (session.step === TOTAL_STEPS) {
     const saved = await saveToSheets({ phone, ...session.data })
 
@@ -90,14 +84,12 @@ async function handleMessage(phone, text) {
       return
     }
 
-    // clear session
-    await saveSession(phone, { step: 1, started: false, data: {} })
+    await clearSession(phone)
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
     return
   }
 
-  // step 6: advance step, save session, send next question
   session.step++
-  await saveSession(phone, session)  // save before replying
+  await saveSession(phone, session)
   await sendWhatsApp(phone, QUESTIONS[session.step])
 }
