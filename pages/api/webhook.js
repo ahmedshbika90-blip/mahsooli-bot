@@ -32,12 +32,15 @@ export default async function handler(req, res) {
   // acknowledge 360dialog immediately
   res.status(200).json({ status: 'ok' })
 
-  // log raw body to see exact 360dialog payload structure
   console.log('BODY:', JSON.stringify(req.body))
 
-  const messages = req.body?.messages
+  // v2 payload structure
+  const entry = req.body?.entry?.[0]
+  const changes = entry?.changes?.[0]
+  const messages = changes?.value?.messages
+
   if (!messages?.length) {
-    console.log('No messages found — body keys:', Object.keys(req.body || {}))
+    console.log('No messages found')
     return
   }
 
