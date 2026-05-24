@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.SHEET_ID,
-      range: 'Sheet1!A:E',
+      range: 'mahsooli!A:E',
       valueInputOption: 'RAW',
       requestBody: {
         values: [['test_phone', 'test_name', 'test_number', 'test@email.com', new Date().toISOString()]]
