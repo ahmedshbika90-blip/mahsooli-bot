@@ -28,17 +28,12 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).end()
 
-  res.status(200).json({ status: 'ok' })
-
-  console.log('BODY:', JSON.stringify(req.body))
-
   const entry = req.body?.entry?.[0]
   const changes = entry?.changes?.[0]
   const messages = changes?.value?.messages
 
   if (!messages?.length) {
-    console.log('No messages found')
-    return
+    return res.status(200).json({ status: 'ok' })
   }
 
   for (const message of messages) {
@@ -56,6 +51,9 @@ export default async function handler(req, res) {
 
     await handleMessage(phone, text)
   }
+
+  // respond AFTER processing is done
+  return res.status(200).json({ status: 'ok' })
 }
 
 async function handleMessage(phone, text) {
@@ -73,17 +71,14 @@ async function handleMessage(phone, text) {
   if (session.step === TOTAL_STEPS) {
     const dataToSave = { phone, ...session.data, [key]: text }
 
-    // send confirmation immediately
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
 
-    // save to sheets in background — don't block
     saveToSheets(dataToSave).catch(err =>
       console.error('Sheets save failed:', err.message)
     )
     return
   }
 
-  // advance and send next question
   advanceStep(phone)
   const nextSession = getSession(phone)
   await sendWhatsApp(phone, QUESTIONS[nextSession.step])
