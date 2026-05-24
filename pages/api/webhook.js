@@ -58,6 +58,13 @@ export default async function handler(req, res) {
 async function handleMessage(phone, text) {
   const session = getSession(phone)
 
+  // new user — send the first question
+  if (!session.started) {
+    session.started = true
+    await sendWhatsApp(phone, QUESTIONS[1])
+    return
+  }
+
   const error = validateAnswer(session.step, text)
   if (error) {
     await sendWhatsApp(phone, error)
@@ -70,7 +77,6 @@ async function handleMessage(phone, text) {
   if (session.step === TOTAL_STEPS) {
     const dataToSave = { phone, ...session.data, [key]: text }
 
-    // save to sheets first
     const saved = await saveToSheets(dataToSave)
 
     if (!saved) {
@@ -78,7 +84,6 @@ async function handleMessage(phone, text) {
       return
     }
 
-    // then confirm to user
     await sendWhatsApp(phone, 'Thank you! Your registration is complete.')
     return
   }
