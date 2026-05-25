@@ -38,9 +38,11 @@ function header(step) {
   const pct = Math.round((step / TOTAL_STEPS) * 100)
   const filled = Math.round(pct / 10)
   const bar = '■'.repeat(filled) + '□'.repeat(10 - filled)
-  return `${bar}  ${pct}%  •  ${step} / ${TOTAL_STEPS}\n\n`
+  const arabicPct = pct.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
+  const arabicStep = step.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
+  const arabicTotal = TOTAL_STEPS.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
+  return `${bar}  ${arabicPct}٪  •  ${arabicStep} / ${arabicTotal}\n\n`
 }
-
 // ─── Welcome message ──────────────────────────────────────────────────────────
 const WELCOME = `*برنامج التمويل الزراعي*
 استمارة تسجيل المزارعين
@@ -48,7 +50,7 @@ const WELCOME = `*برنامج التمويل الزراعي*
 
 أهلاً بك.
 
-هذه الاستمارة جزء من مبادرة وطنية لدعم المزارعين وتيسير حصولهم على التمويل الزراعي. مشاركتك تُسهم مباشرةً في تطوير هذا البرنامج.
+هذه الاستمارة جزء من مبادرة  لدعم المزارعين وتيسير حصولهم على التمويل الزراعي. مشاركتك تُسهم مباشرةً في تطوير هذا البرنامج.
 
 ────────────────────────
 
