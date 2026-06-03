@@ -590,7 +590,6 @@ async function handleMessage(phone, text) {
   const session = await getSession(phone)
   if (session.completed) return
 
-  // ── Not yet greeted → send welcome ──────────────────────────────────────────
   if (!session.greeted) {
     session.greeted = true
     await saveSession(phone, session)
@@ -598,11 +597,11 @@ async function handleMessage(phone, text) {
     return
   }
 
-  // ── Greeted but not started → wait for "1" ──────────────────────────────────
   if (!session.started) {
     if (text === '1') {
       session.started = true
       session.step = 1
+      session.last_activity = Date.now()
       await Promise.all([
         saveSession(phone, session),
         sendWhatsApp(phone, getQuestion(1, session.data))
@@ -613,7 +612,18 @@ async function handleMessage(phone, text) {
     return
   }
 
-  // ── In progress ──────────────────────────────────────────────────────────────
+  // ── User resuming after reminder ─────────────────────────────────────────
+  if (session.awaiting_resume) {
+    session.awaiting_resume = false
+    session.last_activity = Date.now()
+    await Promise.all([
+      saveSession(phone, session),
+      sendWhatsApp(phone, getQuestion(session.step, session.data))
+    ])
+    return
+  }
+
+  // ── Normal flow ──────────────────────────────────────────────────────────
   const error = validateAnswer(session.step, text)
   if (error) {
     await sendWhatsApp(phone, error)
@@ -621,9 +631,9 @@ async function handleMessage(phone, text) {
   }
 
   session.data[`q${session.step}`] = text
+  session.last_activity = Date.now()
   const nextStep = getNextStep(session.step, text)
 
-  // ── Completed ────────────────────────────────────────────────────────────────
   if (nextStep > TOTAL_STEPS) {
     const [saved] = await Promise.all([
       saveToSheets(buildSheetsRow(phone, session.data)),
@@ -641,7 +651,6 @@ async function handleMessage(phone, text) {
     return
   }
 
-  // ── Next question — save session and send question in parallel ───────────────
   session.step = nextStep
   await Promise.all([
     saveSession(phone, session),
