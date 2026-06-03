@@ -613,15 +613,21 @@ async function handleMessage(phone, text) {
   }
 
   // ── User resuming after reminder ─────────────────────────────────────────
-  if (session.awaiting_resume) {
+ if (session.awaiting_resume) {
+  if (text === '2') {
     session.awaiting_resume = false
     session.last_activity = Date.now()
     await Promise.all([
       saveSession(phone, session),
       sendWhatsApp(phone, getQuestion(session.step, session.data))
     ])
-    return
+  } else {
+    await sendWhatsApp(phone,
+      `اكتب  *2*  للمتابعة من حيث توقفت.`
+    )
   }
+  return
+}
 
   // ── Normal flow ──────────────────────────────────────────────────────────
   const error = validateAnswer(session.step, text)

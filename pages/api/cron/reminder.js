@@ -37,10 +37,9 @@ export default async function handler(req, res) {
       if (session.last_reminder && now - session.last_reminder < TEN_MINUTES) continue
 
       // Send reminder
-      await sendWhatsApp(phone,
-        `استمارتك لم تكتمل بعد.\n\nأرسل أي رسالة للمتابعة من حيث توقفت.`
-      )
-
+  await sendWhatsApp(phone,
+  `نذكّرك بأن استمارة التسجيل في برنامج التمويل الزراعي لا تزال غير مكتملة.\n\nإتمام التسجيل يضمن لك الاستفادة من البرنامج.\n\nاكتب  *2*  للمتابعة من حيث توقفت.`
+)
       // Update session — mark awaiting_resume so we re-send the question on next message
       await fetch(`${DB_URL}/sessions/${phone}.json?auth=${SECRET}`, {
         method: 'PATCH',
