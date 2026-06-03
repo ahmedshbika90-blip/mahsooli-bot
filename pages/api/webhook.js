@@ -3,7 +3,7 @@ import { sendWhatsApp } from '../../lib/whatsapp'
 import { saveToSheets } from '../../lib/sheets'
 import { getSession, saveSession } from '../../lib/firebase'
 import { isAlreadyProcessed } from '../../utils/session'
-
+import { saveToFirestore } from '../../lib/firestore'
 const TOTAL_STEPS = 58
 
 // ─── Lookup tables ────────────────────────────────────────────────────────────
@@ -640,22 +640,25 @@ async function handleMessage(phone, text) {
   session.last_activity = Date.now()
   const nextStep = getNextStep(session.step, text)
 
-  if (nextStep > TOTAL_STEPS) {
-    const [saved] = await Promise.all([
-      saveToSheets(buildSheetsRow(phone, session.data)),
-      saveSession(phone, { completed: true, step: TOTAL_STEPS, started: true, greeted: true, data: {} })
-    ])
+if (nextStep > TOTAL_STEPS) {
+  const row = buildSheetsRow(phone, session.data)
 
-    if (!saved) {
-      await sendWhatsApp(phone, 'حدث خطأ في حفظ البيانات. يرجى المحاولة مرة أخرى.')
-      return
-    }
+  const [sheetsSaved, firestoreSaved] = await Promise.all([
+    saveToSheets(row),
+    saveToFirestore(phone, row),
+    saveSession(phone, { completed: true, step: TOTAL_STEPS, started: true, greeted: true, data: {} })
+  ])
 
-    await sendWhatsApp(phone,
-      `تم التسجيل بنجاح ✓\n────────────────────────\nشكراً لك. سيتواصل معك فريقنا قريباً.\n\nنتمنى لك موسماً زراعياً موفقاً.`
-    )
+  if (!sheetsSaved && !firestoreSaved) {
+    await sendWhatsApp(phone, 'حدث خطأ في حفظ البيانات. يرجى المحاولة مرة أخرى.')
     return
   }
+
+  await sendWhatsApp(phone,
+    `تم التسجيل بنجاح ✓\n────────────────────────\nشكراً لك. سيتواصل معك فريقنا قريباً.\n\nنتمنى لك موسماً زراعياً موفقاً.`
+  )
+  return
+}
 
   session.step = nextStep
   await Promise.all([
