@@ -2,8 +2,8 @@ import { sendWhatsApp } from '../../../lib/whatsapp'
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
 const SECRET = process.env.FIREBASE_SECRET
-const FIVE_MINUTES = 1 * 60 * 1000
-const TEN_MINUTES  = 10 * 60 * 1000
+const ONE_MINUTE = 1 * 60 * 1000
+const TEN_MINUTES = 10 * 60 * 1000
 const MAX_REMINDERS = 2
 
 export default async function handler(req, res) {
