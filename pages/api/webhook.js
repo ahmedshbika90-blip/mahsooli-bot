@@ -643,23 +643,19 @@ async function handleMessage(phone, text) {
 if (nextStep > TOTAL_STEPS) {
   const row = buildSheetsRow(phone, session.data)
 
-  const [sheetsSaved, firestoreSaved] = await Promise.all([
+  // Save everything first
+  await Promise.all([
     saveToSheets(row),
     saveToFirestore(phone, row),
     saveSession(phone, { completed: true, step: TOTAL_STEPS, started: true, greeted: true, data: {} })
   ])
 
-  if (!sheetsSaved && !firestoreSaved) {
-    await sendWhatsApp(phone, 'حدث خطأ في حفظ البيانات. يرجى المحاولة مرة أخرى.')
-    return
-  }
-
+  // Then send confirmation separately
   await sendWhatsApp(phone,
     `تم التسجيل بنجاح ✓\n────────────────────────\nشكراً لك. سيتواصل معك فريقنا قريباً.\n\nنتمنى لك موسماً زراعياً موفقاً.`
   )
   return
 }
-
   session.step = nextStep
   await Promise.all([
     saveSession(phone, session),
