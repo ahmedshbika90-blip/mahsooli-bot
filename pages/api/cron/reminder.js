@@ -7,14 +7,16 @@ const TEN_MINUTES  = 10 * 60 * 1000
 const MAX_REMINDERS = 2
 
 export default async function handler(req, res) {
-  // Verify this is a legitimate Vercel cron call
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+  // temporarily disabled for debugging
+  // if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  //   return res.status(401).json({ error: 'Unauthorized' })
+  // }
 
   try {
     const response = await fetch(`${DB_URL}/sessions.json?auth=${SECRET}`)
     const sessions = await response.json()
+
+    console.log('All sessions:', JSON.stringify(sessions))
 
     if (!sessions) return res.status(200).json({ sent: 0 })
 
@@ -22,25 +24,25 @@ export default async function handler(req, res) {
     let sent = 0
 
     for (const [phone, session] of Object.entries(sessions)) {
-      // Skip: completed, not started, no activity recorded
-      if (session.completed)      continue
-      if (!session.started)       continue
-      if (!session.last_activity) continue
+      console.log(`Checking ${phone}:`, {
+        completed:     session.completed,
+        started:       session.started,
+        last_activity: session.last_activity,
+        inactive_ms:   session.last_activity ? now - session.last_activity : 'no activity',
+        reminder_count: session.reminder_count
+      })
 
-      // Skip: active in last 5 minutes
-      if (now - session.last_activity < FIVE_MINUTES) continue
+      if (session.completed)      { console.log('skip: completed');      continue }
+      if (!session.started)       { console.log('skip: not started');     continue }
+      if (!session.last_activity) { console.log('skip: no last_activity'); continue }
+      if (now - session.last_activity < ONE_MINUTE) { console.log('skip: too recent'); continue }
+      if ((session.reminder_count || 0) >= MAX_REMINDERS) { console.log('skip: max reminders'); continue }
 
-      // Skip: hit reminder limit
-      if ((session.reminder_count || 0) >= MAX_REMINDERS) continue
+      console.log(`Sending reminder to ${phone}`)
+      await sendWhatsApp(phone,
+        `نذكّرك بأن استمارة التسجيل في برنامج التمويل الزراعي لا تزال غير مكتملة.\n\nإتمام التسجيل يضمن لك الاستفادة من البرنامج.\n\nاكتب  *2*  للمتابعة من حيث توقفت.`
+      )
 
-      // Skip: reminder sent less than 10 minutes ago
-      if (session.last_reminder && now - session.last_reminder < TEN_MINUTES) continue
-
-      // Send reminder
-  await sendWhatsApp(phone,
-  `نذكّرك بأن استمارة التسجيل في برنامج التمويل الزراعي لا تزال غير مكتملة.\n\nإتمام التسجيل يضمن لك الاستفادة من البرنامج.\n\nاكتب  *2*  للمتابعة من حيث توقفت.`
-)
-      // Update session — mark awaiting_resume so we re-send the question on next message
       await fetch(`${DB_URL}/sessions/${phone}.json?auth=${SECRET}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
