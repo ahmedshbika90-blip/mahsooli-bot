@@ -8,9 +8,9 @@ const MAX_REMINDERS = 2
 
 export default async function handler(req, res) {
   // temporarily disabled for debugging
-  // if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-  //   return res.status(401).json({ error: 'Unauthorized' })
-  // }
+   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+     return res.status(401).json({ error: 'Unauthorized' })
+   }
 
   try {
     const response = await fetch(`${DB_URL}/sessions.json?auth=${SECRET}`)

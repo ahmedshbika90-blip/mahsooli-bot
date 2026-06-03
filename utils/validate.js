@@ -18,20 +18,19 @@ export function validateAnswer(step, text) {
       return null
 
     // Q3: Date of birth DD/MM/YYYY
-    case 3: {
-      const normalized = t
-        .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-        .replace(/[.-]/g, '/')
-      const parts = normalized.split('/')
-      if (parts.length !== 3) return '❌ صيغة غير صحيحة.\nيرجى الإدخال هكذا: DD/MM/YYYY\nمثال: 15/05/1990'
-      const [d, m, y] = parts.map(Number)
-      if (isNaN(d) || isNaN(m) || isNaN(y)) return '❌ يرجى إدخال أرقام صحيحة.\nمثال: 15/05/1990'
-      if (y < 1920 || y > 2010) return '❌ السنة يجب أن تكون بين 1920 و2010.'
-      if (m < 1 || m > 12) return '❌ الشهر يجب أن يكون بين 1 و12.'
-      if (d < 1 || d > 31) return '❌ اليوم يجب أن يكون بين 1 و31.'
-      return null
-    }
-
+  case 3: {
+  const normalized = t
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[.-]/g, '/')
+  const parts = normalized.split('/')
+  if (parts.length !== 3) return '❌ صيغة غير صحيحة.\nيرجى الإدخال هكذا: سنة/شهر/يوم\nمثال: ١٩٩٠/٠٥/١٥'
+  const [y, m, d] = parts.map(Number)
+  if (isNaN(d) || isNaN(m) || isNaN(y)) return '❌ يرجى إدخال أرقام صحيحة.\nمثال: ١٩٩٠/٠٥/١٥'
+  if (y < 1920 || y > 2010) return '❌ السنة يجب أن تكون بين ١٩٢٠ و٢٠١٠.'
+  if (m < 1 || m > 12) return '❌ الشهر يجب أن يكون بين ١ و١٢.'
+  if (d < 1 || d > 31) return '❌ اليوم يجب أن يكون بين ١ و٣١.'
+  return null
+}
     // Q4: Gender
     case 4: {
       if (!['ذكر','أنثى','1','2'].includes(t))

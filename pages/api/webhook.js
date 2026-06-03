@@ -88,10 +88,10 @@ function getQuestion(step, data = {}) {
 
     case 2: return `${h}اسم العائلة`
 
-    case 3: return `${h}تاريخ الميلاد
+  case 3: return `${h}تاريخ الميلاد
 
-الصيغة:  يوم / شهر / سنة
-مثال:  15/05/1990`
+الصيغة:  سنة / شهر / يوم
+مثال:  ١٩٩٠/٠٥/١٥`
 
     case 4: return `${h}الجنس
 
