@@ -71,6 +71,9 @@ const WELCOME = `*برنامج التمويل الزراعي*
 · لاختيار أكثر من إجابة، افصل بفاصلة
   مثال: ١,٣,٤
 
+· للمبالغ المالية الكبيرة، استخدم الفاصلة
+  مثال: ١,٥٠٠,٠٠٠ وليس ١٥٠٠٠٠٠  
+  
 · للأسئلة الاختيارية اكتب  لا يوجد
 
 · جميع بياناتك محفوظة بسرية تامة ولن تُشارك مع أي جهة خارج البرنامج.
@@ -629,7 +632,7 @@ function buildRow(phone, d) {
     yield_sunflower:    d.q35 || '',
     finance_source:     FINANCE_HOW[d.q36] || '',
     other_finance:      d.q37 || '',
-    finance_amount:     d.q38 || '',
+    finance_amount:   (data.q38 || '').replace(/,|،/g, ''),
     repaid:             d.q39 ? (isYes(d.q39) ? 'نعم' : 'لا') : '',
     no_repay_reason:    NO_REPAY[d.q40] || '',
     other_repay_reason: d.q41 || '',
@@ -651,7 +654,7 @@ function buildRow(phone, d) {
     use_pesticides:     isYes(d.q54||'') ? 'نعم' : 'لا',
     no_pesticides_reason: d.q55 ? lookup(NO_INPUT_REASON, d.q55) : '',
     other_no_pesticides:  d.q56 || '',
-    requested_amount:   d.q57 || '',
+    requested_amount: (data.q57 || '').replace(/,|،/g, ''),
     marital_status:     MARITAL[d.q58] || '',
     wives:              d.q59 || '',
     has_children:       d.q60 ? (isYes(d.q60) ? 'نعم' : 'لا') : '',

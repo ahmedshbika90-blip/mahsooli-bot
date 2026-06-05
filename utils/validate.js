@@ -224,12 +224,13 @@ export function validateAnswer(step, text, data = {}) {
 
     // Q38: Finance amount
     case 38: {
-      const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(norm.replace(/[^\d.,]/g, '').replace(/,/g, ''))
-      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ بالأرقام.\nمثال: ١,٥٠٠,٠٠٠'
-      return null
-    }
-
+  const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  const num = parseFloat(norm.replace(/,/g, '').replace(/[^\d]/g, ''))
+  if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ بالأرقام.\nمثال: ١,٥٠٠,٠٠٠'
+  if (num >= 1000 && !t.includes(',') && !t.includes('،'))
+    return '❌ يرجى إضافة الفاصلة للأرقام الكبيرة.\nمثال: ١,٥٠٠,٠٠٠ وليس ١٥٠٠٠٠٠'
+  return null
+}
     // Q39: Repaid?
     case 39:
       if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
@@ -346,13 +347,14 @@ export function validateAnswer(step, text, data = {}) {
       return null
 
     // Q57: Requested amount
-    case 57: {
-      const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(norm.replace(/[^\d.,]/g, '').replace(/,/g, ''))
-      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ بالأرقام.\nمثال: ١,٥٠٠,٠٠٠'
-      return null
-    }
-
+  case 57: {
+  const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  const num = parseFloat(norm.replace(/,/g, '').replace(/[^\d]/g, ''))
+  if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ بالأرقام.\nمثال: ١,٥٠٠,٠٠٠'
+  if (num >= 1000 && !t.includes(',') && !t.includes('،'))
+    return '❌ يرجى إضافة الفاصلة للأرقام الكبيرة.\nمثال: ١,٥٠٠,٠٠٠ وليس ١٥٠٠٠٠٠'
+  return null
+}
     // Q58: Marital status
     case 58:
       if (!['1','2','3','4'].includes(t))
