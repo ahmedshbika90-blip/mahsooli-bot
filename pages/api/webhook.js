@@ -348,10 +348,13 @@ function getQuestion(step, data = {}) {
 
     case 44: return `${h}اذكر اسم البنك`
 
-    case 45: return `${h}*المحاصيل وطلب التمويل*
+case 45: {
+  const selectedCrops = (data.q28 || '').split(/[,،\s]+/).filter(Boolean)
+  const isSingle = selectedCrops.length === 1
+  return `${h}*المحاصيل وطلب التمويل*
 ────────────────────────
 
-المحاصيل التي تريد زراعتها هذا الموسم
+${isSingle ? 'المحصول الذي تريد زراعته هذا الموسم' : 'المحاصيل التي تريد زراعتها هذا الموسم'}
 
 ١ — سمسم
 ٢ — ذرة رفيعة
@@ -361,9 +364,13 @@ function getQuestion(step, data = {}) {
 ٦ — دخن
 ٧ — عباد الشمس
 
-أكثر من اختيار: مثال  ١,٣`
+${isSingle ? '' : 'أكثر من اختيار: مثال  ١,٣'}`
+}
 
-    case 46: return `${h}لماذا اخترت هذه المحاصيل؟  (اختياري)
+   case 46: {
+  const count = (data.q45 || '').split(/[,،\s]+/).filter(Boolean).length
+  const word = count === 1 ? 'هذا المحصول' : 'هذه المحاصيل'
+  return `${h}لماذا اخترت ${word}؟  (اختياري)
 
 ١ — سعر أفضل في السوق
 ٢ — طلب محلي مرتفع
@@ -377,6 +384,7 @@ function getQuestion(step, data = {}) {
 
 أكثر من اختيار: مثال  ١,٤
 أو اكتب: لا يوجد`
+}
 
     case 47: return `${h}وضّح السبب`
 
@@ -571,8 +579,12 @@ function getNextStep(step, answer, data) {
     case 54: return isYes(t) ? 57 : 55      // pesticides yes → amount, no → why
     case 55: return t.includes('5') ? 56 : 57   // other → specify
     case 56: return 57
-    case 58: return t === '2' ? 59 : 60     // married → wives, else → children
-    case 59: return 60
+    case 58: {
+     if (t === '2') return 59   // married → wives
+     if (t === '1') return 63   // single → skip to dependents
+      return 60                   // widowed/divorced → children
+                  }
+    case 59: return 60              
     case 60: return isYes(t) ? 61 : 63      // has children → count, else → dependents
     case 61: return 62
     case 63: return isYes(t) ? 64 : 65      // dependents → count
