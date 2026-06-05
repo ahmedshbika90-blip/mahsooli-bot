@@ -1,366 +1,462 @@
-export function validateAnswer(step, text) {
+export function validateAnswer(step, text, data = {}) {
   const t = text.trim()
 
   switch (step) {
 
-    // Q1: Full name (first + second + third combined)
+    // Q1: Full 4-part name
     case 1: {
       const parts = t.split(/\s+/).filter(Boolean)
-      if (parts.length < 2) return '❌ يرجى إدخال الاسم الكامل (الاسم الأول والثاني على الأقل).\nمثال: أحمد عبدالله إبراهيم'
+      if (parts.length < 3) return '❌ يرجى إدخال الاسم الرباعي كاملاً (٣ أجزاء على الأقل).\nمثال: أحمد محمد إبراهيم إسماعيل'
       if (/\d/.test(t)) return '❌ يجب ألا يحتوي الاسم على أرقام.'
       return null
     }
 
-    // Q2: Last name
-    case 2:
-      if (t.length < 2) return '❌ يرجى إدخال اسم العائلة.'
-      if (/\d/.test(t)) return '❌ يجب ألا يحتوي الاسم على أرقام.'
-      return null
-
-    // Q3: Date of birth DD/MM/YYYY
-  case 3: {
-  const normalized = t
-    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-    .replace(/[.-]/g, '/')
-  const parts = normalized.split('/')
-  if (parts.length !== 3) return '❌ صيغة غير صحيحة.\nيرجى الإدخال هكذا: سنة/شهر/يوم\nمثال: ١٩٩٠/٠٥/١٥'
-  const [y, m, d] = parts.map(Number)
-  if (isNaN(d) || isNaN(m) || isNaN(y)) return '❌ يرجى إدخال أرقام صحيحة.\nمثال: ١٩٩٠/٠٥/١٥'
-  if (y < 1920 || y > 2010) return '❌ السنة يجب أن تكون بين ١٩٢٠ و٢٠١٠.'
-  if (m < 1 || m > 12) return '❌ الشهر يجب أن يكون بين ١ و١٢.'
-  if (d < 1 || d > 31) return '❌ اليوم يجب أن يكون بين ١ و٣١.'
-  return null
-}
-    // Q4: Gender
-    case 4: {
-      if (!['ذكر','أنثى','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - ذكر\n2 - أنثى'
-      return null
-    }
-
-    // Q5: Primary phone
-    case 5: {
-      const digits = t.replace(/\D/g, '')
-      if (digits.length !== 10) return '❌ رقم الهاتف يجب أن يكون 10 أرقام.'
-      if (!digits.startsWith('0')) return '❌ يجب أن يبدأ الرقم بـ 0.\nمثال: 0912345678'
-      return null
-    }
-
-    // Q6: Secondary phone (optional)
-    case 6: {
-      if (['لا يوجد','-','skip','لا'].includes(t.toLowerCase())) return null
-      const digits = t.replace(/\D/g, '')
-      if (digits.length !== 10) return '❌ رقم الهاتف يجب أن يكون 10 أرقام.\nإذا لم يكن لديك رقم ثانٍ اكتب: لا يوجد'
-      if (!digits.startsWith('0')) return '❌ يجب أن يبدأ الرقم بـ 0.'
-      return null
-    }
-
-    // Q7: Has national ID
-    case 7:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
-      return null
-
-    // Q8: National ID number
-    case 8: {
-      const clean = t.replace(/[-\s]/g, '')
+    // Q2: DOB
+    case 2: {
+      const normalized = t
         .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      if (clean.length !== 11) return '❌ رقم الهوية يجب أن يكون 11 رقماً بالضبط.'
-      if (!/^\d+$/.test(clean)) return '❌ رقم الهوية يجب أن يحتوي على أرقام فقط.'
+        .replace(/[.\-،]/g, '/')
+        .replace(/\s+/g, '')
+      const parts = normalized.split('/')
+      if (parts.length !== 3) return '❌ صيغة غير صحيحة.\nمثال: ١٥/٠٦/١٩٨٥'
+      const [d, m, y] = parts.map(Number)
+      if (isNaN(d) || isNaN(m) || isNaN(y)) return '❌ يرجى إدخال أرقام صحيحة.\nمثال: ١٥/٠٦/١٩٨٥'
+      if (y < 1920 || y > 2010) return '❌ السنة يجب أن تكون بين ١٩٢٠ و٢٠١٠.'
+      if (m < 1 || m > 12) return '❌ الشهر يجب أن يكون بين ١ و١٢.'
+      if (d < 1 || d > 31) return '❌ اليوم يجب أن يكون بين ١ و٣١.'
       return null
     }
+
+    // Q3: Gender
+    case 3:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — ذكر\n٢ — أنثى'
+      return null
+
+    // Q4: Primary phone
+    case 4: {
+      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      const digits = normalized.replace(/\D/g, '')
+      if (digits.length !== 10) return '❌ رقم الهاتف يجب أن يكون ١٠ أرقام.\nمثال: ٠٩١٢٣٤٥٦٧٨'
+      if (!digits.startsWith('0')) return '❌ يجب أن يبدأ الرقم بـ ٠.\nمثال: ٠٩١٢٣٤٥٦٧٨'
+      return null
+    }
+
+    // Q5: Secondary phone (optional)
+    case 5: {
+      if (['لا يوجد','لايوجد','-'].includes(t)) return null
+      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      const digits = normalized.replace(/\D/g, '')
+      if (digits.length !== 10) return '❌ رقم الهاتف يجب أن يكون ١٠ أرقام.\nأو اكتب: لا يوجد'
+      if (!digits.startsWith('0')) return '❌ يجب أن يبدأ الرقم بـ ٠.'
+      return null
+    }
+
+    // Q6: Has ID?
+    case 6:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
+      return null
+
+    // Q7: ID number
+    case 7: {
+      const clean = t
+        .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+        .replace(/[-\s]/g, '')
+      if (clean.length !== 11) return '❌ رقم البطاقة يجب أن يكون ١١ رقماً بالضبط.'
+      if (!/^\d+$/.test(clean)) return '❌ يجب أن يحتوي على أرقام فقط.'
+      return null
+    }
+
+    // Q8: ID photo — handled in webhook (image type check)
+    case 8: return null
 
     // Q9: State
     case 9: {
-      const nums = Array.from({length:18}, (_,i) => String(i+1))
-      if (!nums.includes(t))
-        return '❌ يرجى اختيار رقم الولاية:\n1. الخرطوم\n2. الجزيرة\n3. سنار\n4. النيل الأبيض\n5. النيل الأزرق\n6. شمال كردفان\n7. جنوب كردفان\n8. غرب كردفان\n9. شمال دارفور\n10. جنوب دارفور\n11. شرق دارفور\n12. غرب دارفور\n13. وسط دارفور\n14. كسلا\n15. البحر الأحمر\n16. القضارف\n17. نهر النيل\n18. الشمالية'
+      const valid = Array.from({length:18}, (_,i) => String(i+1))
+      if (!valid.includes(t))
+        return '❌ يرجى اختيار رقم الولاية:\n١ — الخرطوم\n٢ — الجزيرة\n٣ — سنار\n٤ — النيل الأبيض\n٥ — النيل الأزرق\n٦ — شمال كردفان\n٧ — جنوب كردفان\n٨ — غرب كردفان\n٩ — شمال دارفور\n١٠ — جنوب دارفور\n١١ — شرق دارفور\n١٢ — غرب دارفور\n١٣ — وسط دارفور\n١٤ — كسلا\n١٥ — البحر الأحمر\n١٦ — القضارف\n١٧ — نهر النيل\n١٨ — الشمالية'
       return null
     }
 
-    // Q10: Locality
-    case 10:
-      if (t.length < 2) return '❌ يرجى إدخال اسم المحلية.'
+    // Q10: Locality (dynamic per state)
+    case 10: {
+      const localities = getLocalities(data.q9 || '')
+      const valid = Array.from({length: localities.length}, (_,i) => String(i+1))
+      if (!valid.includes(t)) {
+        const list = localities.map((l,i) => `${i+1} — ${l}`).join('\n')
+        return `❌ يرجى اختيار رقم المحلية:\n${list}`
+      }
       return null
+    }
 
     // Q11: Education
     case 11:
       if (!['1','2','3','4','5','6','7','8'].includes(t))
-        return '❌ يرجى اختيار رقم المستوى التعليمي:\n1. لا يوجد\n2. خلوة (يقرأ ويكتب)\n3. مرحلة أساسية\n4. مرحلة ثانوية\n5. دبلوم\n6. بكالوريوس\n7. ماجستير\n8. دكتوراه'
+        return '❌ يرجى اختيار رقم المستوى:\n١ — لا يوجد\n٢ — خلوة (يقرأ ويكتب)\n٣ — مرحلة أساسية\n٤ — مرحلة ثانوية\n٥ — دبلوم\n٦ — بكالوريوس\n٧ — ماجستير\n٨ — دكتوراه'
       return null
 
     // Q12: Smartphone
     case 12:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
     // Q13: Network coverage
     case 13:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
     // Q14: Best network
     case 14:
-      if (!['زين','سوداني','mtn','MTN','1','2','3'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - زين\n2 - سوداني\n3 - MTN'
+      if (!['1','2','3'].includes(t))
+        return '❌ يرجى الاختيار:\n١ — زين\n٢ — سوداني\n٣ — MTN'
       return null
 
-    // Q15: Bank account
+    // Q15: Has bank?
     case 15:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
     // Q16: Which banks
     case 16: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
-      if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. بنك الخرطوم\n2. بنك فيصل الإسلامي\n3. بنك النيل\n4. SAB\n5. بنك أمدرمان الوطني\n6. بنك النيلين\n7. أخرى\n\nمثال: 1 أو 1,3'
+      if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7','8'].includes(p)))
+        return '❌ يرجى اختيار الأرقام:\n١ — بنك الخرطوم\n٢ — بنك أمدرمان الوطني\n٣ — البنك الزراعي السوداني\n٤ — بنك فيصل الإسلامي\n٥ — بنك النيل\n٦ — بنك النيلين\n٧ — مصرف المزارع\n٨ — أخرى\n\nأكثر من اختيار: مثال ١,٣'
       return null
     }
 
     // Q17: Banking apps
     case 17: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
-      if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. تطبيق بنك الخرطوم\n2. تطبيق بنك فيصل\n3. تطبيق بنك النيل\n4. تطبيق SAB\n5. تطبيق ONB\n6. تطبيق بنك النيلين\n7. لا أستخدم تطبيقاً\n\nمثال: 1 أو 1,3'
+      if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7','8'].includes(p)))
+        return '❌ يرجى اختيار الأرقام:\n١ — بنكك (الخرطوم)\n٢ — اوكاش (أمدرمان)\n٣ — مصرفك (المزارع)\n٤ — الزراعي موبايل\n٥ — فوري (فيصل)\n٦ — ساهل (النيل)\n٧ — من مكانك (النيلين)\n٨ — لا أستخدم تطبيقاً\n\nأكثر من اختيار: مثال ١,٣'
       return null
     }
 
-    // Q18: Union member
+    // Q18: Other bank name (free text)
     case 18:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (t.length < 2) return '❌ يرجى ذكر اسم البنك.'
       return null
 
-    // Q19: Union name
+    // Q19: Union member?
     case 19:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
+      return null
+
+    // Q20: Union name
+    case 20:
       if (t.length < 2) return '❌ يرجى إدخال اسم الاتحاد أو الجمعية.'
       return null
 
-    // Q20: Farm size
-    case 20: {
-      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(normalized.replace(/[^\d.]/g, ''))
-      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال مساحة الأرض بالأرقام.\nمثال: 25 أو 7.5'
-      if (num > 10000) return '❌ المساحة كبيرة جداً. يرجى التحقق من الرقم.'
+    // Q21: Farm size
+    case 21: {
+      const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      const num = parseFloat(norm.replace(/[^\d.]/g, ''))
+      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المساحة بالأرقام.\nمثال: ٥٠'
+      if (num > 10000) return '❌ المساحة كبيرة جداً. يرجى التحقق.'
       return null
     }
 
-    // Q21: Owned or rented
-    case 21:
-      if (!['مملوكة','مستأجرة','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - مملوكة\n2 - مستأجرة'
+    // Q22: Owned/rented
+    case 22:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — مملوكة\n٢ — مستأجرة'
       return null
 
-    // Q22: Rent amount
-    case 22: {
-      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(normalized.replace(/[^\d.]/g, ''))
-      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال مبلغ الإيجار بالأرقام.\nمثال: 500000'
-      return null
-    }
-
-    // Q23: Ownership docs
+    // Q23: Rent tenure
     case 23:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (!['1','2','3','4'].includes(t))
+        return '❌ يرجى اختيار مدة الإيجار:\n١ — موسم واحد\n٢ — موسمان\n٣ — من ٣ إلى ٥ مواسم\n٤ — أكثر من ٥ مواسم'
       return null
 
-    // Q24: Has guarantees
+    // Q24: Ownership docs
     case 24:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
-    // Q25: Guarantee types
-    case 25: {
+    // Q25: Has guarantees?
+    case 25:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
+      return null
+
+    // Q26: Guarantee types
+    case 26: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
       if (!parts.length || !parts.every(p => ['1','2','3','4'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. شيك\n2. معدات\n3. أرض\n4. أخرى\n\nمثال: 3 أو 1,3'
+        return '❌ يرجى اختيار الأرقام:\n١ — شيك\n٢ — معدات\n٣ — أرض\n٤ — أخرى\n\nأكثر من اختيار: مثال ١,٣'
       return null
     }
 
-    // Q26: Other guarantee
-    case 26:
+    // Q27: Other guarantee
+    case 27:
       if (t.length < 2) return '❌ يرجى تحديد نوع الضمان.'
       return null
 
-    // Q27: Crops last 3 seasons
-    case 27: {
+    // Q28: Crops last 3 seasons
+    case 28: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
       if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. سمسم\n2. ذرة رفيعة\n3. فول سوداني\n4. قطن\n5. بذرة بطيخ\n6. دخن\n7. عباد الشمس\n\nمثال: 1,2,3'
+        return '❌ يرجى اختيار الأرقام:\n١ — سمسم\n٢ — ذرة رفيعة\n٣ — فول سوداني\n٤ — قطن\n٥ — حب بطيخ\n٦ — دخن\n٧ — عباد الشمس\n\nأكثر من اختيار: مثال ١,٢,٣'
       return null
     }
 
-    // Q28-34: Yield per crop (1 to 4 in 0.5 steps or لا يوجد)
-    case 28:
+    // Q29-35: Yield per crop (free number)
     case 29:
     case 30:
     case 31:
     case 32:
     case 33:
-    case 34: {
-      const noYield = ['لا يوجد','لايوجد','na','NA','لا']
-      if (noYield.includes(t.toLowerCase()) || noYield.includes(t)) return null
-      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(normalized)
-      const valid = [1, 1.5, 2, 2.5, 3, 3.5, 4]
-      if (!valid.includes(num))
-        return '❌ يرجى اختيار قيمة من القائمة:\n1 — 1.5 — 2 — 2.5 — 3 — 3.5 — 4\n\nأو اكتب: لا يوجد (إذا لم تزرع هذا المحصول)'
+    case 34:
+    case 35: {
+      const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      const num = parseFloat(norm.replace(/[^\d.]/g, ''))
+      if (isNaN(num) || num < 0) return '❌ يرجى إدخال رقم صحيح.\nمثال: ٥٠'
       return null
     }
 
-    // Q35: Finance source
-    case 35:
+    // Q36: Finance source
+    case 36:
       if (!['1','2','3','4','5'].includes(t))
-        return '❌ يرجى اختيار طريقة التمويل:\n1. بنك\n2. تمويل ذاتي\n3. ائتمان تاجر\n4. منظمة\n5. أخرى'
+        return '❌ يرجى اختيار طريقة التمويل:\n١ — بنك\n٢ — تمويل ذاتي\n٣ — ائتمان تاجر\n٤ — منظمة\n٥ — أخرى'
       return null
 
-    // Q36: Finance amount
-    case 36: {
-      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(normalized.replace(/[^\d.]/g, ''))
-      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال مبلغ التمويل بالأرقام.\nمثال: 5000000'
+    // Q37: Other finance source
+    case 37:
+      if (t.length < 2) return '❌ يرجى توضيح طريقة التمويل.'
+      return null
+
+    // Q38: Finance amount
+    case 38: {
+      const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      const num = parseFloat(norm.replace(/[^\d.,]/g, '').replace(/,/g, ''))
+      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ بالأرقام.\nمثال: ١,٥٠٠,٠٠٠'
       return null
     }
 
-    // Q37: Repaid
-    case 37:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+    // Q39: Repaid?
+    case 39:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
-    // Q38: Why not repaid
-    case 38:
+    // Q40: Why not repaid
+    case 40:
       if (!['1','2','3','4'].includes(t))
-        return '❌ يرجى اختيار السبب:\n1. إنتاج منخفض\n2. تكلفة مدخلات عالية\n3. لا يوجد إنتاج\n4. أخرى'
+        return '❌ يرجى اختيار السبب:\n١ — انخفاض الإنتاج\n٢ — ارتفاع تكاليف المدخلات\n٣ — لا يوجد إنتاج\n٤ — أسباب أخرى'
       return null
 
-    // Q39: Finance use
-    case 39: {
+    // Q41: Other repay reason
+    case 41:
+      if (t.length < 2) return '❌ يرجى توضيح السبب.'
+      return null
+
+    // Q42: Finance use
+    case 42: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
       if (!parts.length || !parts.every(p => ['1','2','3','4','5','6'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. بذور\n2. سماد\n3. مبيدات\n4. إيجار آلات\n5. وقود\n6. حصاد\n\nمثال: 1,2'
+        return '❌ يرجى اختيار الأرقام:\n١ — بذور\n٢ — سماد\n٣ — مبيدات\n٤ — إيجار آلات\n٥ — وقود\n٦ — حصاد\n\nأكثر من اختيار: مثال ١,٢'
       return null
     }
 
-    // Q40: Finance bank
-    case 40:
-      if (!['1','2','3','4','5','6','7'].includes(t))
-        return '❌ يرجى اختيار البنك:\n1. بنك الخرطوم\n2. بنك فيصل الإسلامي\n3. بنك النيل\n4. SAB\n5. بنك أمدرمان الوطني\n6. بنك النيلين\n7. أخرى'
+    // Q43: Which bank financed
+    case 43:
+      if (!['1','2','3','4','5','6','7','8'].includes(t))
+        return '❌ يرجى اختيار البنك:\n١ — بنك الخرطوم\n٢ — بنك أمدرمان الوطني\n٣ — البنك الزراعي السوداني\n٤ — بنك فيصل الإسلامي\n٥ — بنك النيل\n٦ — بنك النيلين\n٧ — مصرف المزارع\n٨ — أخرى'
       return null
 
-    // Q41: Preferred crops
-    case 41: {
+    // Q44: Other bank name
+    case 44:
+      if (t.length < 2) return '❌ يرجى ذكر اسم البنك.'
+      return null
+
+    // Q45: Preferred crops this season
+    case 45: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
       if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. سمسم\n2. ذرة رفيعة\n3. فول سوداني\n4. قطن\n5. بذرة بطيخ\n6. دخن\n7. عباد الشمس\n\nمثال: 1,3'
+        return '❌ يرجى اختيار الأرقام:\n١ — سمسم\n٢ — ذرة رفيعة\n٣ — فول سوداني\n٤ — قطن\n٥ — حب بطيخ\n٦ — دخن\n٧ — عباد الشمس\n\nأكثر من اختيار: مثال ١,٣'
       return null
     }
 
-    // Q42: Why preferred (optional)
-    case 42: return null
-
-    // Q43: Finance crop
-    case 43:
-      if (!['1','2','3','4','5','6','7'].includes(t))
-        return '❌ يرجى اختيار المحصول:\n1. سمسم\n2. ذرة رفيعة\n3. فول سوداني\n4. قطن\n5. بذرة بطيخ\n6. دخن\n7. عباد الشمس'
-      return null
-
-    // Q44: Seed variety (optional)
-    case 44: return null
-
-    // Q45: Fertiliser
-    case 45:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
-      return null
-
-    // Q46: Pesticides
-    case 46:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
-      return null
-
-    // Q47: Requested amount
-    case 47: {
-      const normalized = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-      const num = parseFloat(normalized.replace(/[^\d.]/g, ''))
-      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ المطلوب بالأرقام.\nمثال: 5000000'
+    // Q46: Why preferred (choices)
+    case 46: {
+      const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
+      if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7','8','9'].includes(p)))
+        return '❌ يرجى اختيار الأرقام:\n١ — سعر أفضل في السوق\n٢ — طلب محلي مرتفع\n٣ — محصول مألوف\n٤ — مناسب للتربة\n٥ — مخاطر أقل\n٦ — إمكانية التخزين\n٧ — توافر المدخلات\n٨ — بناءً على نصيحة متخصص\n٩ — أخرى\n\nأكثر من اختيار: مثال ١,٤'
       return null
     }
 
-    // Q48: Marital status
+    // Q47: Other crop reason
+    case 47:
+      if (t.length < 2) return '❌ يرجى توضيح السبب.'
+      return null
+
+    // Q48: Finance crop (one only)
     case 48:
-      if (!['1','2','3','4'].includes(t))
-        return '❌ يرجى اختيار الحالة الاجتماعية:\n1. أعزب\n2. متزوج\n3. أرمل\n4. مطلق'
+      if (!['1','2','3','4','5','6','7'].includes(t))
+        return '❌ يرجى اختيار محصول واحد:\n١ — سمسم\n٢ — ذرة رفيعة\n٣ — فول سوداني\n٤ — قطن\n٥ — حب بطيخ\n٦ — دخن\n٧ — عباد الشمس'
       return null
 
-    // Q49: Wives (only if married)
+    // Q49: Seed variety (dynamic per crop)
     case 49: {
-      const num = parseInt(t)
-      if (isNaN(num) || num < 1 || num > 4)
-        return '❌ يرجى إدخال عدد الزوجات (من 1 إلى 4).'
+      const varieties = getVarieties(data.q48 || '')
+      if (!varieties.length) return null
+      const valid = Array.from({length: varieties.length}, (_,i) => String(i+1))
+      if (!valid.includes(t)) {
+        const list = varieties.map((v,i) => `${i+1} — ${v}`).join('\n')
+        return `❌ يرجى اختيار رقم الصنف:\n${list}`
+      }
       return null
     }
 
-    // Q50: Has children (only if married)
+    // Q50: Other variety
     case 50:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+      if (t.length < 2) return '❌ يرجى ذكر اسم الصنف.'
       return null
 
-    // Q51: Total children
-    case 51: {
-      const num = parseInt(t)
+    // Q51: Use fertilizer?
+    case 51:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
+      return null
+
+    // Q52: Why no fertilizer
+    case 52: {
+      const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
+      if (!parts.length || !parts.every(p => ['1','2','3','4','5'].includes(p)))
+        return '❌ يرجى اختيار الأرقام:\n١ — التكلفة عالية\n٢ — غير متاح في المنطقة\n٣ — المحصول لا يحتاجه\n٤ — تجربة سلبية سابقة\n٥ — أخرى\n\nأكثر من اختيار: مثال ١,٢'
+      return null
+    }
+
+    // Q53: Other no-fertilizer reason
+    case 53:
+      if (t.length < 2) return '❌ يرجى توضيح السبب.'
+      return null
+
+    // Q54: Use pesticides?
+    case 54:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
+      return null
+
+    // Q55: Why no pesticides
+    case 55: {
+      const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
+      if (!parts.length || !parts.every(p => ['1','2','3','4','5'].includes(p)))
+        return '❌ يرجى اختيار الأرقام:\n١ — التكلفة عالية\n٢ — غير متاح في المنطقة\n٣ — المحصول لا يحتاجه\n٤ — تجربة سلبية سابقة\n٥ — أخرى\n\nأكثر من اختيار: مثال ١,٢'
+      return null
+    }
+
+    // Q56: Other no-pesticides reason
+    case 56:
+      if (t.length < 2) return '❌ يرجى توضيح السبب.'
+      return null
+
+    // Q57: Requested amount
+    case 57: {
+      const norm = t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      const num = parseFloat(norm.replace(/[^\d.,]/g, '').replace(/,/g, ''))
+      if (isNaN(num) || num <= 0) return '❌ يرجى إدخال المبلغ بالأرقام.\nمثال: ١,٥٠٠,٠٠٠'
+      return null
+    }
+
+    // Q58: Marital status
+    case 58:
+      if (!['1','2','3','4'].includes(t))
+        return '❌ يرجى اختيار الحالة الاجتماعية:\n١ — أعزب\n٢ — متزوج\n٣ — أرمل\n٤ — مطلق'
+      return null
+
+    // Q59: Wives
+    case 59: {
+      const num = parseInt(t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
+      if (isNaN(num) || num < 1 || num > 4) return '❌ يرجى إدخال عدد الزوجات (من ١ إلى ٤).'
+      return null
+    }
+
+    // Q60: Has children?
+    case 60:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
+      return null
+
+    // Q61: Total children
+    case 61: {
+      const num = parseInt(t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
       if (isNaN(num) || num < 0) return '❌ يرجى إدخال عدد الأطفال.'
       return null
     }
 
-    // Q52: Children under 18
-    case 52: {
-      const num = parseInt(t)
-      if (isNaN(num) || num < 0) return '❌ يرجى إدخال عدد الأطفال دون سن 18.'
+    // Q62: Children under 18
+    case 62: {
+      const num = parseInt(t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
+      if (isNaN(num) || num < 0) return '❌ يرجى إدخال عدد الأطفال دون سن ١٨.'
       return null
     }
 
-    // Q53: Other dependents
-    case 53:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+    // Q63: Other dependents?
+    case 63:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
-    // Q54: Dependents count
-    case 54: {
-      const num = parseInt(t)
+    // Q64: Dependents count
+    case 64: {
+      const num = parseInt(t.replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))))
       if (isNaN(num) || num < 1) return '❌ يرجى إدخال عدد المعالين.'
       return null
     }
 
-    // Q55: Other income
-    case 55:
-      if (!['نعم','لا','1','2'].includes(t))
-        return '❌ يرجى الاختيار:\n1 - نعم\n2 - لا'
+    // Q65: Other income?
+    case 65:
+      if (!['1','2'].includes(t)) return '❌ يرجى الاختيار:\n١ — نعم\n٢ — لا'
       return null
 
-    // Q56: Income sources
-    case 56: {
+    // Q66: Income sources
+    case 66: {
       const parts = t.split(/[,،\s]+/).map(s => s.trim()).filter(Boolean)
-      if (!parts.length || !parts.every(p => ['1','2','3','4','5'].includes(p)))
-        return '❌ يرجى اختيار الأرقام:\n1. وظيفة رسمية\n2. تجارة\n3. رعي\n4. حوالات\n5. دعم نقدي من منظمة\n\nمثال: 1,4'
+      if (!parts.length || !parts.every(p => ['1','2','3','4','5','6','7','8','9','10'].includes(p)))
+        return '❌ يرجى اختيار الأرقام:\n١ — وظيفة رسمية\n٢ — تجارة\n٣ — العمل بالأجر اليومي\n٤ — خدمات نقل وترحيل\n٥ — المعاش\n٦ — حرف يدوية\n٧ — إيجار الأراضي أو المعدات\n٨ — رعي\n٩ — حوالات\n١٠ — دعم نقدي من منظمات\n\nأكثر من اختيار: مثال ١,٤'
       return null
     }
 
-    // Q57: Remittances (optional)
-    case 57: return null
+    // Q67: Remittances amount (optional)
+    case 67: return null
 
-    // Q58: Challenges (optional)
-    case 58: return null
+    // Q68: Consent
+    case 68:
+      if (t !== '1') return '❌ يرجى كتابة ١ للإقرار والموافقة.'
+      return null
 
     default: return null
   }
+}
+
+// ─── Localities per state ─────────────────────────────────────────────────────
+export function getLocalities(stateNum) {
+  const map = {
+    '1':  ['الخرطوم','بحري','أم درمان','أمبدة','كرري','شرق النيل','جبل أولياء'],
+    '2':  ['مدني','جنوب الجزيرة','شرق الجزيرة','أم القرى','الحصاحيصا','الكاملين','المناقل','القرشي'],
+    '3':  ['سنجة','سنار','السوكي','الدندر','أبو حجار','شرق سنار','الدالي والمزموم'],
+    '4':  ['ربك','كوستي','الدويم','القطينة','الجبلين','السلام','أم رمته','تندلتي'],
+    '5':  ['الدمازين','الروصيرص','الكرمك','باو','قيسان','ود الماحي','التضامن'],
+    '6':  ['الأبيض','بارا','الرهد','أم روابة','شيكان','غبيش','وادي الباشا','الخوي'],
+    '7':  ['كادقلي','الدلنج','أبو جبيهة','العباسية','لقاوة','هيبان','رشاد','تلودي'],
+    '8':  ['الفولة','النهود','أبو زبد','بابنوسة','الوحدة'],
+    '9':  ['الفاشر','كبكابية','كتم','الطويشة','مليط','أم كدادة','الواحة'],
+    '10': ['نيالا','كاس','الضعين','رهيد البردي','دمسو','بليل','إد الغنم'],
+    '11': ['الضعين','أبو كارنكا','يابس','الفردوس','أسلاية'],
+    '12': ['الجنينة','كرينك','هبيلة','بيضة','فور برنقا','سربا'],
+    '13': ['زالنجي','وادي صالح','أزم','نيرتتي','روكورو'],
+    '14': ['كسلا','حلفا الجديدة','ريفي كسلا','غرب كسلا','أروما','خشم القربة','ود الحليو','همشكوريب','تلكوك','نهر عطبرة','ريفي ود الحليو'],
+    '15': ['بورتسودان','سواكن','سنكات','طوكر','هيا','درديب','عقيق','القنب والأوليب','حلايب','جبيت المعادن'],
+    '16': ['القضارف','وسط القضارف','الفاو','الرهد','القريشة','القلابات الشرقية','القلابات الغربية','الفشقة','المفازة','البطانة','باسندة','قلع النحل'],
+    '17': ['الدامر','عطبرة','شندي','المتمة','بربر','أبو حمد','البحيرة'],
+    '18': ['دنقلا','مروي','الدبة','القولد','البرقيق','دلقو','حلفا'],
+  }
+  return map[stateNum] || []
+}
+
+// ─── Varieties per crop ───────────────────────────────────────────────────────
+export function getVarieties(cropNum) {
+  const map = {
+    '1': ['برومو','أم شجرة','جزولي','قضارف ١','أخرى'],                                      // sesame
+    '2': ['ود أحمد','أرفع قدمك','دهب','طابت','فتريتة','بطانة','ود باكو','مُقد','حريري','عكر','أخرى'], // sorghum
+    '3': ['غبيش','أحمدي','توزي','سودري','أخرى'],                                             // groundnut
+    '4': ['الصيني ١','البرازيلي RR','أخرى'],                                                  // cotton
+    '5': [],                                                                                   // watermelon - no varieties
+    '6': ['عشانا','عزيز','فارس','بيوضة','أخرى'],                                              // millet
+    '7': ['هاي صن ٣٣','SY','سيرينا','أخرى'],                                                  // sunflower
+  }
+  return map[cropNum] || []
 }

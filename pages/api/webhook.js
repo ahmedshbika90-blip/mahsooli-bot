@@ -1,10 +1,11 @@
-import { validateAnswer } from '../../utils/validate'
+import { validateAnswer, getLocalities, getVarieties } from '../../utils/validate'
 import { sendWhatsApp } from '../../lib/whatsapp'
 import { saveToSheets } from '../../lib/sheets'
 import { getSession, saveSession } from '../../lib/firebase'
-import { isAlreadyProcessed } from '../../utils/session'
 import { saveToFirestore } from '../../lib/firestore'
-const TOTAL_STEPS = 58
+import { isAlreadyProcessed } from '../../utils/session'
+
+const TOTAL_STEPS = 68
 
 // ─── Lookup tables ────────────────────────────────────────────────────────────
 const STATES = {
@@ -17,50 +18,62 @@ const EDUCATION = {
   '1':'لا يوجد','2':'خلوة (يقرأ ويكتب)','3':'مرحلة أساسية',
   '4':'مرحلة ثانوية','5':'دبلوم','6':'بكالوريوس','7':'ماجستير','8':'دكتوراه'
 }
-const NETWORKS   = { '1':'زين','2':'سوداني','3':'MTN' }
-const BANKS      = { '1':'بنك الخرطوم','2':'بنك فيصل الإسلامي','3':'بنك النيل','4':'SAB','5':'بنك أمدرمان الوطني','6':'بنك النيلين','7':'أخرى' }
-const BANK_APPS  = { '1':'تطبيق بنك الخرطوم','2':'تطبيق بنك فيصل','3':'تطبيق بنك النيل','4':'تطبيق SAB','5':'تطبيق ONB','6':'تطبيق بنك النيلين','7':'لا أستخدم تطبيقاً' }
-const CROPS      = { '1':'سمسم','2':'ذرة رفيعة','3':'فول سوداني','4':'قطن','5':'بذرة بطيخ','6':'دخن','7':'عباد الشمس' }
-const GUARANTEES = { '1':'شيك','2':'معدات','3':'أرض','4':'أخرى' }
-const FINANCE_HOW= { '1':'بنك','2':'تمويل ذاتي','3':'ائتمان تاجر','4':'منظمة','5':'أخرى' }
-const NO_REPAY   = { '1':'إنتاج منخفض','2':'تكلفة مدخلات عالية','3':'لا يوجد إنتاج','4':'أخرى' }
-const FINANCE_USE= { '1':'بذور','2':'سماد','3':'مبيدات','4':'إيجار آلات','5':'وقود','6':'حصاد' }
-const MARITAL    = { '1':'أعزب','2':'متزوج','3':'أرمل','4':'مطلق' }
-const INCOME_SRC = { '1':'وظيفة رسمية','2':'تجارة','3':'رعي','4':'حوالات','5':'دعم نقدي من منظمة' }
+const NETWORKS    = {'1':'زين','2':'سوداني','3':'MTN'}
+const BANKS       = {'1':'بنك الخرطوم','2':'بنك أمدرمان الوطني','3':'البنك الزراعي السوداني','4':'بنك فيصل الإسلامي','5':'بنك النيل','6':'بنك النيلين','7':'مصرف المزارع','8':'أخرى'}
+const BANK_APPS   = {'1':'بنكك','2':'اوكاش','3':'مصرفك','4':'الزراعي موبايل','5':'فوري','6':'ساهل','7':'من مكانك','8':'لا أستخدم تطبيقاً'}
+const CROPS       = {'1':'سمسم','2':'ذرة رفيعة','3':'فول سوداني','4':'قطن','5':'حب بطيخ','6':'دخن','7':'عباد الشمس'}
+const GUARANTEES  = {'1':'شيك','2':'معدات','3':'أرض','4':'أخرى'}
+const FINANCE_HOW = {'1':'بنك','2':'تمويل ذاتي','3':'ائتمان تاجر','4':'منظمة','5':'أخرى'}
+const NO_REPAY    = {'1':'انخفاض الإنتاج','2':'ارتفاع تكاليف المدخلات','3':'لا يوجد إنتاج','4':'أسباب أخرى'}
+const FINANCE_USE = {'1':'بذور','2':'سماد','3':'مبيدات','4':'إيجار آلات','5':'وقود','6':'حصاد'}
+const CROP_REASON = {'1':'سعر أفضل','2':'طلب محلي','3':'محصول مألوف','4':'مناسب للتربة','5':'مخاطر أقل','6':'إمكانية التخزين','7':'توافر المدخلات','8':'نصيحة متخصص','9':'أخرى'}
+const NO_INPUT_REASON = {'1':'التكلفة عالية','2':'غير متاح','3':'المحصول لا يحتاجه','4':'تجربة سلبية','5':'أخرى'}
+const MARITAL     = {'1':'أعزب','2':'متزوج','3':'أرمل','4':'مطلق'}
+const RENT_TENURE = {'1':'موسم واحد','2':'موسمان','3':'من ٣ إلى ٥ مواسم','4':'أكثر من ٥ مواسم'}
+const INCOME_SRC  = {
+  '1':'وظيفة رسمية','2':'تجارة','3':'العمل بالأجر اليومي',
+  '4':'خدمات نقل وترحيل','5':'المعاش','6':'حرف يدوية',
+  '7':'إيجار الأراضي أو المعدات','8':'رعي','9':'حوالات','10':'دعم نقدي من منظمات'
+}
+// Crop step mapping for yield questions
+const CROP_YIELD_STEP = {'1':29,'2':30,'3':31,'4':32,'5':33,'6':34,'7':35}
+const YIELD_STEP_CROP = {29:'1',30:'2',31:'3',32:'4',33:'5',34:'6',35:'7'}
+const YIELD_CROP_NAME = {29:'السمسم',30:'الذرة الرفيعة',31:'الفول السوداني',32:'القطن',33:'حب البطيخ',34:'الدخن',35:'عباد الشمس'}
+const YIELD_UNIT      = {29:'شوال',30:'شوال',31:'شوال',32:'قنطار',33:'شوال',34:'شوال',35:'شوال'}
 
 function lookup(map, val) {
   return val.split(/[,،\s]+/).map(v => map[v.trim()] || v).join('، ')
 }
-function isYes(val) { return val === 'نعم' || val === '1' }
+function isYes(val) { return val === '1' }
+function isNo(val)  { return val === '2' }
 
 // ─── Progress header ──────────────────────────────────────────────────────────
 function header(step) {
   const pct = Math.round((step / TOTAL_STEPS) * 100)
   const filled = Math.round(pct / 10)
   const bar = '■'.repeat(filled) + '□'.repeat(10 - filled)
-  const arabicPct = pct.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
-  const arabicStep = step.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
-  const arabicTotal = TOTAL_STEPS.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
-  return `${bar}  ${arabicPct}٪  •  ${arabicStep} / ${arabicTotal}\n\n`
+  const ar = n => n.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
+  return `${bar}  ${ar(pct)}٪  •  ${ar(step)} / ${ar(TOTAL_STEPS)}\n\n`
 }
+
 // ─── Welcome message ──────────────────────────────────────────────────────────
 const WELCOME = `*برنامج التمويل الزراعي*
-استمارة تسجيل المزارعين
+البنك الزراعي السوداني بالشراكة مع محصولي
 ────────────────────────
 
 أهلاً بك.
 
-هذه الاستمارة جزء من مبادرة  لدعم المزارعين وتيسير حصولهم على التمويل الزراعي. مشاركتك تُسهم مباشرةً في تطوير هذا البرنامج.
+هذه الاستمارة جزء من مبادرة لدعم المزارعين وتيسير حصولهم على التمويل الزراعي. مشاركتك تُسهم مباشرةً في تطوير هذا البرنامج.
 
 ────────────────────────
 
 *تعليمات الإجابة*
 
 · أجب برقم الخيار فقط
-  مثال: للاختيار "ذكر" اكتب  1
+  مثال: للاختيار "ذكر" اكتب  ١
 
 · لاختيار أكثر من إجابة، افصل بفاصلة
-  مثال: 1,3,4
+  مثال: ١,٣,٤
 
 · للأسئلة الاختيارية اكتب  لا يوجد
 
@@ -68,489 +81,589 @@ const WELCOME = `*برنامج التمويل الزراعي*
 
 ────────────────────────
 
-اكتب  *1*  للبدء`
+اكتب  *١*  للبدء`
+
 // ─── Questions ────────────────────────────────────────────────────────────────
 function getQuestion(step, data = {}) {
   const h = header(step)
-  const isMarried = data.q48 === '2'
+  const isMarried = data.q58 === '2'
 
   switch(step) {
 
-    // ── القسم الأول: المعلومات الشخصية ──────────────────────────────────────
-
-    case 1: return `${h}*القسم الأول — المعلومات الشخصية*
+    case 1: return `${h}*القسم الأول — البيانات الشخصية*
 ────────────────────────
 
-اسمك الكامل
-(الاسم الأول والثاني والثالث إن وُجد)
+ما اسمك الرباعي؟
 
-مثال: أحمد عبدالله إبراهيم`
+مثال: أحمد محمد إبراهيم إسماعيل`
 
-    case 2: return `${h}اسم العائلة`
+    case 2: return `${h}تاريخ الميلاد
 
-  case 3: return `${h}تاريخ الميلاد
+اليوم / الشهر / السنة
+مثال: ١٥/٠٦/١٩٨٥`
 
-الصيغة:  سنة / شهر / يوم
-مثال:  ١٩٩٠/٠٥/١٥`
+    case 3: return `${h}الجنس
 
-    case 4: return `${h}الجنس
+١ — ذكر
+٢ — أنثى`
 
-1 — ذكر
-2 — أنثى`
+    case 4: return `${h}رقم الهاتف الأساسي
 
-    case 5: return `${h}رقم الهاتف الأساسي
+١٠ أرقام تبدأ بـ ٠
+مثال: ٠٩١٢٣٤٥٦٧٨`
 
-10 أرقام تبدأ بـ 0
-مثال: 0912345678`
-
-    case 6: return `${h}رقم الهاتف الثانوي  (اختياري)
+    case 5: return `${h}رقم الهاتف الثانوي  (اختياري)
 
 اكتب  لا يوجد  إذا لم يكن لديك`
 
-    case 7: return `${h}هل لديك بطاقة هوية وطنية؟
+    case 6: return `${h}هل لديك بطاقة إثبات شخصية؟
+(رقم وطني / جواز سفر / بطاقة قومية)
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
-    case 8: return `${h}رقم الهوية الوطنية
+    case 7: return `${h}رقم بطاقة إثبات الشخصية
 
-11 رقماً بالضبط`
+١١ رقماً بالضبط
+مثال: ١٢٣٤٥٦٧٨٩٠١`
 
-    // ── الموقع والتعليم ──────────────────────────────────────────────────────
+    case 8: return `${h}أرسل صورة واضحة لبطاقة إثبات الشخصية
 
-    case 9: return `${h}*الموقع والتعليم*
+التقط صورة للبطاقة وأرسلها`
+
+    case 9: return `${h}*القسم الثاني — بيانات السكن والتواصل*
 ────────────────────────
 
 الولاية
 
-1 — الخرطوم       10 — جنوب دارفور
-2 — الجزيرة       11 — شرق دارفور
-3 — سنار          12 — غرب دارفور
-4 — النيل الأبيض  13 — وسط دارفور
-5 — النيل الأزرق  14 — كسلا
-6 — شمال كردفان   15 — البحر الأحمر
-7 — جنوب كردفان   16 — القضارف
-8 — غرب كردفان    17 — نهر النيل
-9 — شمال دارفور   18 — الشمالية`
+١ — الخرطوم       ١٠ — جنوب دارفور
+٢ — الجزيرة       ١١ — شرق دارفور
+٣ — سنار          ١٢ — غرب دارفور
+٤ — النيل الأبيض  ١٣ — وسط دارفور
+٥ — النيل الأزرق  ١٤ — كسلا
+٦ — شمال كردفان   ١٥ — البحر الأحمر
+٧ — جنوب كردفان   ١٦ — القضارف
+٨ — غرب كردفان    ١٧ — نهر النيل
+٩ — شمال دارفور   ١٨ — الشمالية`
 
-    case 10: return `${h}المحلية`
+    case 10: {
+      const localities = getLocalities(data.q9 || '')
+      const list = localities.map((l,i) => `${i+1} — ${l}`).join('\n')
+      return `${h}المحلية\n\n${list}`
+    }
 
     case 11: return `${h}أعلى مستوى تعليمي
 
-1 — لا يوجد
-2 — خلوة (يقرأ ويكتب)
-3 — مرحلة أساسية
-4 — مرحلة ثانوية
-5 — دبلوم
-6 — بكالوريوس
-7 — ماجستير
-8 — دكتوراه`
+١ — لا يوجد
+٢ — خلوة (يقرأ ويكتب)
+٣ — مرحلة أساسية
+٤ — مرحلة ثانوية
+٥ — دبلوم
+٦ — بكالوريوس
+٧ — ماجستير
+٨ — دكتوراه`
 
     case 12: return `${h}هل تمتلك هاتفاً ذكياً؟
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
-    case 13: return `${h}هل لديك تغطية شبكة جيدة في منطقتك؟
+    case 13: return `${h}هل تغطية شبكة الاتصال جيدة في منطقتك؟
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
     case 14: return `${h}أفضل شبكة في منطقتك
 
-1 — زين
-2 — سوداني
-3 — MTN`
+١ — زين
+٢ — سوداني
+٣ — MTN`
 
-    // ── البنوك ───────────────────────────────────────────────────────────────
+    case 15: return `${h}هل لديك حساب في أي بنك؟
 
-    case 15: return `${h}هل لديك حساب بنكي؟
+١ — نعم
+٢ — لا`
 
-1 — نعم
-2 — لا`
+    case 16: return `${h}في أي بنك لديك حساب؟
 
-    case 16: return `${h}البنوك التي لديك حساب فيها
+١ — بنك الخرطوم
+٢ — بنك أمدرمان الوطني
+٣ — البنك الزراعي السوداني
+٤ — بنك فيصل الإسلامي
+٥ — بنك النيل
+٦ — بنك النيلين
+٧ — مصرف المزارع
+٨ — أخرى
 
-1 — بنك الخرطوم
-2 — بنك فيصل الإسلامي
-3 — بنك النيل
-4 — SAB
-5 — بنك أمدرمان الوطني
-6 — بنك النيلين
-7 — أخرى
+أكثر من اختيار: مثال  ١,٣`
 
-أكثر من اختيار: مثال  1,3`
+    case 17: return `${h}أي تطبيق بنكي تستخدم؟
 
-    case 17: return `${h}التطبيقات البنكية التي تستخدمها
+١ — بنكك  (الخرطوم)
+٢ — اوكاش  (أمدرمان)
+٣ — مصرفك  (المزارع)
+٤ — الزراعي موبايل
+٥ — فوري  (فيصل)
+٦ — ساهل  (النيل)
+٧ — من مكانك  (النيلين)
+٨ — لا أستخدم تطبيقاً
 
-1 — تطبيق بنك الخرطوم
-2 — تطبيق بنك فيصل
-3 — تطبيق بنك النيل
-4 — تطبيق SAB
-5 — تطبيق ONB
-6 — تطبيق بنك النيلين
-7 — لا أستخدم تطبيقاً
+أكثر من اختيار: مثال  ١,٣`
 
-أكثر من اختيار: مثال  1,3`
+    case 18: return `${h}اذكر اسم البنك`
 
-    // ── القسم الثاني: الزراعة والتمويل ──────────────────────────────────────
-
-    case 18: return `${h}*القسم الثاني — الزراعة والتمويل*
+    case 19: return `${h}*القسم الثالث — الزراعة والتمويل*
 ────────────────────────
 
 هل أنت عضو في اتحاد زراعي أو جمعية؟
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
-    case 19: return `${h}اسم الاتحاد أو الجمعية`
+    case 20: return `${h}اذكر اسم الاتحاد أو الجمعية`
 
-    case 20: return `${h}مساحة الأرض الزراعية
-بالفدان
+    case 21: return `${h}*تفاصيل المزرعة*
+────────────────────────
 
-مثال: 25  أو  7.5`
+مساحة الأرض الزراعية  (فدان)
 
-    case 21: return `${h}حالة الأرض
+مثال: ٥٠`
 
-1 — مملوكة
-2 — مستأجرة`
+    case 22: return `${h}حالة الأرض
 
-    case 22: return `${h}مبلغ الإيجار في الموسم
+١ — مملوكة
+٢ — مستأجرة`
+
+    case 23: return `${h}مدة عقد الإيجار
+
+١ — موسم واحد
+٢ — موسمان
+٣ — من ٣ إلى ٥ مواسم
+٤ — أكثر من ٥ مواسم`
+
+    case 24: return `${h}هل لديك وثائق رسمية تثبت ملكية الأرض؟
+
+١ — نعم
+٢ — لا`
+
+    case 25: return `${h}*الضمانات والمحاصيل*
+────────────────────────
+
+هل بإمكانك تقديم ضمانات؟
+
+١ — نعم
+٢ — لا`
+
+    case 26: return `${h}نوع الضمان
+
+١ — شيك
+٢ — معدات
+٣ — أرض
+٤ — أخرى
+
+أكثر من اختيار: مثال  ١,٣`
+
+    case 27: return `${h}اذكر نوع الضمان`
+
+    case 28: return `${h}المحاصيل التي زرعتها في آخر ٣ مواسم
+
+١ — سمسم
+٢ — ذرة رفيعة
+٣ — فول سوداني
+٤ — قطن
+٥ — حب بطيخ
+٦ — دخن
+٧ — عباد الشمس
+
+أكثر من اختيار: مثال  ١,٢,٣`
+
+    case 29:
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+    case 34:
+    case 35: {
+      const cropName = YIELD_CROP_NAME[step]
+      const unit     = YIELD_UNIT[step]
+      return `${h}*متوسط الإنتاجية — ${cropName}*
+آخر ٣ مواسم  •  ${unit} / فدان
+────────────────────────
+أرسل رقماً فقط
+مثال: ٥٠`
+    }
+
+    case 36: return `${h}كيف موّلت زراعتك في الموسم الماضي؟
+
+١ — بنك
+٢ — تمويل ذاتي
+٣ — ائتمان تاجر
+٤ — منظمة
+٥ — أخرى`
+
+    case 37: return `${h}وضّح كيف موّلت زراعتك`
+
+    case 38: return `${h}مبلغ التمويل الذي حصلت عليه
 بالجنيه السوداني
 
-مثال: 500000`
+مثال: ١,٥٠٠,٠٠٠`
 
-    case 23: return `${h}هل لديك وثائق تثبت ملكية الأرض؟
+    case 39: return `${h}هل تمكنت من سداد التمويل كاملاً؟
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
-    case 24: return `${h}هل لديك ضمانات يمكنك تقديمها؟
+    case 40: return `${h}لماذا لم تتمكن من السداد؟
 
-1 — نعم
-2 — لا`
+١ — انخفاض الإنتاج
+٢ — ارتفاع تكاليف المدخلات
+٣ — لا يوجد إنتاج
+٤ — أسباب أخرى`
 
-    case 25: return `${h}نوع الضمان
+    case 41: return `${h}وضّح سبب عدم السداد`
 
-1 — شيك
-2 — معدات
-3 — أرض
-4 — أخرى
+    case 42: return `${h}كيف استخدمت مبلغ التمويل؟
 
-أكثر من اختيار: مثال  1,3`
+١ — بذور
+٢ — سماد
+٣ — مبيدات
+٤ — إيجار آلات
+٥ — وقود
+٦ — حصاد
 
-    case 26: return `${h}يرجى تحديد نوع الضمان الآخر`
+أكثر من اختيار: مثال  ١,٢`
 
-    case 27: return `${h}المحاصيل التي زرعتها في آخر 3 مواسم
+    case 43: return `${h}من أين حصلت على التمويل؟
 
-1 — سمسم
-2 — ذرة رفيعة
-3 — فول سوداني
-4 — قطن
-5 — بذرة بطيخ
-6 — دخن
-7 — عباد الشمس
+١ — بنك الخرطوم
+٢ — بنك أمدرمان الوطني
+٣ — البنك الزراعي السوداني
+٤ — بنك فيصل الإسلامي
+٥ — بنك النيل
+٦ — بنك النيلين
+٧ — مصرف المزارع
+٨ — أخرى`
 
-أكثر من اختيار: مثال  1,2,3`
+    case 44: return `${h}اذكر اسم البنك`
 
-    // ── متوسط الإنتاجية ──────────────────────────────────────────────────────
-
-    case 28: return `${h}*متوسط الإنتاجية — السمسم*
-آخر 3 مواسم  •  شوال / فدان
+    case 45: return `${h}*المحاصيل وطلب التمويل*
 ────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
+
+المحاصيل التي تريد زراعتها هذا الموسم
+
+١ — سمسم
+٢ — ذرة رفيعة
+٣ — فول سوداني
+٤ — قطن
+٥ — حب بطيخ
+٦ — دخن
+٧ — عباد الشمس
+
+أكثر من اختيار: مثال  ١,٣`
+
+    case 46: return `${h}لماذا اخترت هذه المحاصيل؟  (اختياري)
+
+١ — سعر أفضل في السوق
+٢ — طلب محلي مرتفع
+٣ — محصول مألوف ومتعارف عليه
+٤ — مناسب لطبيعة المنطقة والتربة
+٥ — مخاطر أقل
+٦ — إمكانية التخزين
+٧ — توافر المدخلات
+٨ — بناءً على نصيحة متخصص
+٩ — أخرى
+
+أكثر من اختيار: مثال  ١,٤
 أو اكتب: لا يوجد`
 
+    case 47: return `${h}وضّح السبب`
 
-    case 29: return `${h}*متوسط الإنتاجية — الذرة الرفيعة*
-آخر 3 مواسم  •  شوال / فدان
-────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
-أو اكتب: لا يوجد`
+    case 48: return `${h}لأي محصول تريد طلب التمويل؟
+(اختر محصولاً واحداً فقط)
 
-    case 30: return `${h}*متوسط الإنتاجية — الفول السوداني*
-آخر 3 مواسم  •  شوال / فدان
-────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
-أو اكتب: لا يوجد`
+١ — سمسم
+٢ — ذرة رفيعة
+٣ — فول سوداني
+٤ — قطن
+٥ — حب بطيخ
+٦ — دخن
+٧ — عباد الشمس`
 
-    case 31: return `${h}*متوسط الإنتاجية — القطن*
-آخر 3 مواسم  •  شوال / فدان
-────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
-أو اكتب: لا يوجد`
+    case 49: {
+      const varieties = getVarieties(data.q48 || '')
+      if (!varieties.length) return `${h}ما الصنف الذي تريد زراعته؟  (اختياري)\n\nاكتب  لا يوجد  إذا لم تعرف`
+      const list = varieties.map((v,i) => `${i+1} — ${v}`).join('\n')
+      return `${h}ما الصنف الذي تريد زراعته؟\n\n${list}`
+    }
 
-    case 32: return `${h}*متوسط الإنتاجية — بذرة البطيخ*
-آخر 3 مواسم  •  شوال / فدان
-────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
-أو اكتب: لا يوجد`
+    case 50: return `${h}اذكر اسم الصنف`
 
-    case 33: return `${h}*متوسط الإنتاجية — الدخن*
-آخر 3 مواسم  •  شوال / فدان
-────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
-أو اكتب: لا يوجد`
+    case 51: return `${h}هل ستستخدم الأسمدة هذا الموسم؟
 
-    case 34: return `${h}*متوسط الإنتاجية — عباد الشمس*
-آخر 3 مواسم  •  شوال / فدان
-────────────────────────
-اختر قيمة: 1 · 1.5 · 2 · 2.5 · 3 · 3.5 · 4
-أو اكتب: لا يوجد`
+١ — نعم
+٢ — لا`
 
-    // ── تمويل الموسم الماضي ──────────────────────────────────────────────────
+    case 52: return `${h}لماذا لن تستخدم الأسمدة؟
 
-    case 35: return `${h}كيف موّلت زراعتك في الموسم الماضي؟
+١ — التكلفة عالية
+٢ — غير متاح في المنطقة
+٣ — المحصول لا يحتاجه
+٤ — تجربة سلبية سابقة
+٥ — أخرى
 
-1 — بنك
-2 — تمويل ذاتي
-3 — ائتمان تاجر
-4 — منظمة
-5 — أخرى`
+أكثر من اختيار: مثال  ١,٢`
 
-    case 36: return `${h}مبلغ التمويل الذي حصلت عليه
+    case 53: return `${h}وضّح السبب`
+
+    case 54: return `${h}هل ستستخدم المبيدات هذا الموسم؟
+
+١ — نعم
+٢ — لا`
+
+    case 55: return `${h}لماذا لن تستخدم المبيدات؟
+
+١ — التكلفة عالية
+٢ — غير متاح في المنطقة
+٣ — المحصول لا يحتاجه
+٤ — تجربة سلبية سابقة
+٥ — أخرى
+
+أكثر من اختيار: مثال  ١,٢`
+
+    case 56: return `${h}وضّح السبب`
+
+    case 57: return `${h}المبلغ الذي تحتاجه كتمويل
 بالجنيه السوداني
 
-مثال: 5000000`
+مثال: ١,٥٠٠,٠٠٠`
 
-    case 37: return `${h}هل تمكنت من سداد التمويل؟
-
-1 — نعم
-2 — لا`
-
-    case 38: return `${h}سبب عدم السداد
-
-1 — إنتاج منخفض
-2 — تكلفة مدخلات عالية
-3 — لا يوجد إنتاج
-4 — أخرى`
-
-    case 39: return `${h}كيف استخدمت التمويل؟
-
-1 — بذور
-2 — سماد
-3 — مبيدات
-4 — إيجار آلات
-5 — وقود
-6 — حصاد
-
-أكثر من اختيار: مثال  1,2`
-
-    case 40: return `${h}البنك الذي قدّم التمويل
-
-1 — بنك الخرطوم
-2 — بنك فيصل الإسلامي
-3 — بنك النيل
-4 — SAB
-5 — بنك أمدرمان الوطني
-6 — بنك النيلين
-7 — أخرى`
-
-    // ── تفضيلات الموسم القادم ────────────────────────────────────────────────
-
-    case 41: return `${h}*تفضيلات الموسم القادم*
-────────────────────────
-
-المحاصيل التي تفضل زراعتها هذا الموسم
-
-1 — سمسم
-2 — ذرة رفيعة
-3 — فول سوداني
-4 — قطن
-5 — بذرة بطيخ
-6 — دخن
-7 — عباد الشمس
-
-أكثر من اختيار: مثال  1,3`
-
-    case 42: return `${h}لماذا تفضل هذه المحاصيل؟
-(اختياري — اكتب  لا يوجد  للتخطي)`
-
-    case 43: return `${h}المحصول الذي تطلب تمويلاً له
-
-1 — سمسم
-2 — ذرة رفيعة
-3 — فول سوداني
-4 — قطن
-5 — بذرة بطيخ
-6 — دخن
-7 — عباد الشمس`
-
-    case 44: return `${h}صنف البذرة
-(اختياري — اكتب  لا يوجد  إذا لم تعرف)`
-
-    case 45: return `${h}هل تخطط لاستخدام الأسمدة؟
-
-1 — نعم
-2 — لا`
-
-    case 46: return `${h}هل تخطط لاستخدام المبيدات؟
-
-1 — نعم
-2 — لا`
-
-    case 47: return `${h}مبلغ التمويل المطلوب
-بالجنيه السوداني
-
-مثال: 5000000`
-
-    // ── القسم الثالث: معلومات الأسرة ─────────────────────────────────────────
-
-    case 48: return `${h}*القسم الثالث — معلومات الأسرة*
+    case 58: return `${h}*القسم الرابع — بيانات الأسرة*
 ────────────────────────
 
 الحالة الاجتماعية
 
-1 — أعزب
-2 — متزوج
-3 — أرمل
-4 — مطلق`
+١ — أعزب
+٢ — متزوج
+٣ — أرمل
+٤ — مطلق`
 
-    case 49: return `${h}عدد الزوجات
-(أدخل رقماً من 1 إلى 4)`
+    case 59: return `${h}عدد الزوجات
+(أدخل رقماً من ١ إلى ٤)`
 
-    case 50: return `${h}هل لديك أطفال؟
+    case 60: return `${h}هل لديك أطفال؟
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
-    case 51: return `${h}عدد الأطفال الإجمالي`
+    case 61: return `${h}عدد الأطفال الإجمالي`
 
-    case 52: return `${h}عدد الأطفال دون سن 18`
+    case 62: return `${h}كم منهم دون سن الـ ١٨؟`
 
-    case 53: {
-      if (isMarried) {
-        return `${h}هل تعول أشخاصاً آخرين غير أطفالك؟
-
-1 — نعم
-2 — لا`
-      }
-      return `${h}هل هناك أشخاص يعتمدون عليك في معيشتهم؟
-
-1 — نعم
-2 — لا`
+    case 63: {
+      if (isMarried) return `${h}هل تعول أشخاصاً آخرين غير أطفالك؟\n\n١ — نعم\n٢ — لا`
+      return `${h}هل هناك أشخاص يعتمدون عليك في معيشتهم؟\n\n١ — نعم\n٢ — لا`
     }
 
-    case 54: return `${h}كم عددهم؟`
+    case 64: return `${h}كم عددهم؟`
 
-    case 55: return `${h}هل لديك مصادر دخل أخرى غير الزراعة؟
+    case 65: return `${h}هل لديك مصدر دخل آخر غير الزراعة؟
 
-1 — نعم
-2 — لا`
+١ — نعم
+٢ — لا`
 
-    case 56: return `${h}مصادر الدخل الأخرى
+    case 66: return `${h}مصادر دخلك الأخرى
 
-1 — وظيفة رسمية
-2 — تجارة
-3 — رعي
-4 — حوالات
-5 — دعم نقدي من منظمة
+١ — وظيفة رسمية
+٢ — تجارة
+٣ — العمل بالأجر اليومي
+٤ — خدمات نقل وترحيل
+٥ — المعاش
+٦ — حرف يدوية
+٧ — إيجار الأراضي أو المعدات
+٨ — رعي
+٩ — حوالات
+١٠ — دعم نقدي من منظمات
 
-أكثر من اختيار: مثال  1,4`
+أكثر من اختيار: مثال  ١,٤`
 
-    case 57: return `${h}المبلغ التقريبي للحوالات سنوياً
-بالجنيه السوداني
-(اختياري — اكتب  لا يوجد)`
+    case 67: return `${h}المبلغ التقريبي للحوالات سنوياً
+بالجنيه السوداني  (اختياري)
 
-    case 58: return `${h}*ملاحظات ختامية*
+اكتب  لا يوجد  إذا لم تشأ الإجابة`
+
+    case 68: return `${h}*الإقرار والموافقة*
 ────────────────────────
 
-ما التحديات التي تواجهها في الزراعة كل موسم، وما الحلول التي تقترحها؟
-(اختياري — اكتب  لا يوجد)`
+أُقِرُّ بأن جميع المعلومات التي قدمتها صحيحة ودقيقة. كما أوافق على قيام محصولي بمعالجة هذه البيانات واستخدامها في تقييم طلبي للتمويل الزراعي وفقاً لشروط وأحكام البرنامج.
+
+تتعهد محصولي بالحفاظ على سرية هذه المعلومات وعدم الإفصاح عنها لأي طرف ثالث إلا في حدود متطلبات التمويل.
+
+────────────────────────
+
+١ — أقر وأوافق بما ورد أعلاه`
 
     default: return null
   }
 }
 
+// ─── Yield step helpers ───────────────────────────────────────────────────────
+function getYieldSteps(cropsAnswer) {
+  return (cropsAnswer || '')
+    .split(/[,،\s]+/)
+    .map(c => c.trim())
+    .filter(c => CROP_YIELD_STEP[c])
+    .map(c => CROP_YIELD_STEP[c])
+    .sort((a,b) => a - b)
+}
+
 // ─── Skip logic ───────────────────────────────────────────────────────────────
-function getNextStep(step, answer) {
+function getNextStep(step, answer, data) {
   const t = answer.trim()
+
   switch(step) {
-    case 7:  return isYes(t) ? 8 : 9
-    case 15: return isYes(t) ? 16 : 18
-    case 18: return isYes(t) ? 19 : 20
-    case 21: return (t==='1'||t==='مملوكة') ? 23 : 22
-    case 22: return 24
-    case 24: return isYes(t) ? 25 : 27
-    case 25: return t.includes('4') ? 26 : 27
-    case 35: return t === '1' ? 36 : 41
-    case 37: return isYes(t) ? 39 : 38
-    case 38: return 39
-    case 48: return t === '2' ? 49 : 53   // married → wives, else → dependents
-    case 49: return 50
-    case 50: return isYes(t) ? 51 : 53
-    case 53: return isYes(t) ? 54 : 55
-    case 55: return isYes(t) ? 56 : 57
+    case 6:  return isYes(t) ? 7 : 9        // has ID → number, else → state
+    case 7:  return 8                        // ID number → photo
+    case 8:  return 9                        // photo → state
+    case 15: return isYes(t) ? 16 : 19      // has bank → which banks, else → union
+    case 16: return t.includes('8') ? 18 : 17  // other bank → name, else → apps
+    case 18: return 17                       // other bank name → apps
+    case 19: return isYes(t) ? 20 : 21      // union → name, else → farm
+    case 22: return t === '2' ? 23 : 24     // rented → tenure, owned → docs
+    case 23: return 25                       // tenure → guarantees
+    case 25: return isYes(t) ? 26 : 28      // has guarantees → type, else → crops
+    case 26: return t.includes('4') ? 27 : 28  // other → specify, else → crops
+    case 28: {                               // crops → first yield step
+      const yieldSteps = getYieldSteps(t)
+      return yieldSteps.length > 0 ? yieldSteps[0] : 36
+    }
+    case 29:
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+    case 34:
+    case 35: {                               // yield → next yield or finance
+      const yieldSteps = getYieldSteps(data.q28 || '')
+      const idx = yieldSteps.indexOf(step)
+      return idx < yieldSteps.length - 1 ? yieldSteps[idx + 1] : 36
+    }
+    case 36: return t === '1' ? 38 : 45     // bank → amount, else → preferred crops
+    case 37: return 45                       // other finance → preferred crops
+    case 39: return isYes(t) ? 42 : 40      // repaid → use, not repaid → why
+    case 40: return t === '4' ? 41 : 42     // other reason → specify, else → use
+    case 41: return 42
+    case 43: return t === '8' ? 44 : 45     // other bank → name, else → preferred
+    case 44: return 45
+    case 46: return t.includes('9') ? 47 : 48   // other reason → specify
+    case 47: return 48
+    case 49: {                               // variety → other if last choice
+      const varieties = getVarieties(data.q48 || '')
+      const lastChoice = String(varieties.length)
+      return (t === lastChoice && varieties[varieties.length-1] === 'أخرى') ? 50 : 51
+    }
+    case 50: return 51
+    case 51: return isYes(t) ? 54 : 52      // fertilizer yes → pesticides, no → why
+    case 52: return t.includes('5') ? 53 : 54   // other → specify
+    case 53: return 54
+    case 54: return isYes(t) ? 57 : 55      // pesticides yes → amount, no → why
+    case 55: return t.includes('5') ? 56 : 57   // other → specify
+    case 56: return 57
+    case 58: return t === '2' ? 59 : 60     // married → wives, else → children
+    case 59: return 60
+    case 60: return isYes(t) ? 61 : 63      // has children → count, else → dependents
+    case 61: return 62
+    case 63: return isYes(t) ? 64 : 65      // dependents → count
+    case 64: return 65
+    case 65: return isYes(t) ? 66 : 68      // other income → sources, else → consent
+    case 66: return t.includes('9') ? 67 : 68   // remittances → amount
+    case 67: return 68
     default: return step + 1
   }
 }
 
 // ─── Sheets row builder ───────────────────────────────────────────────────────
-function buildSheetsRow(phone, d) {
+function buildRow(phone, d) {
   const nameParts = (d.q1 || '').split(/\s+/).filter(Boolean)
+  const localities = getLocalities(d.q9 || '')
+  const localityName = localities[parseInt(d.q10)-1] || d.q10 || ''
+
   return {
     phone,
-    first_name:       nameParts[0] || '',
-    second_name:      nameParts[1] || '',
-    third_name:       nameParts[2] || '',
-    last_name:        d.q2  || '',
-    dob:              d.q3  || '',
-    gender:           d.q4==='1' ? 'ذكر' : d.q4==='2' ? 'أنثى' : d.q4 || '',
-    phone_primary:    d.q5  || '',
-    phone_secondary:  d.q6  || '',
-    has_national_id:  isYes(d.q7 ||'') ? 'نعم' : 'لا',
-    national_id:      d.q8  || '',
-    state:            STATES[d.q9]   || d.q9  || '',
-    locality:         d.q10 || '',
-    education:        EDUCATION[d.q11] || d.q11 || '',
-    has_smartphone:   isYes(d.q12||'') ? 'نعم' : 'لا',
-    network_coverage: isYes(d.q13||'') ? 'نعم' : 'لا',
-    best_network:     NETWORKS[d.q14]  || d.q14 || '',
-    has_bank:         isYes(d.q15||'') ? 'نعم' : 'لا',
-    banks:            d.q16 ? lookup(BANKS,     d.q16) : '',
-    banking_apps:     d.q17 ? lookup(BANK_APPS, d.q17) : '',
-    union_member:     isYes(d.q18||'') ? 'نعم' : 'لا',
-    union_name:       d.q19 || '',
-    farm_size:        d.q20 || '',
-    land_ownership:   (d.q21==='1'||d.q21==='مملوكة') ? 'مملوكة' : 'مستأجرة',
-    rent_amount:      d.q22 || '',
-    ownership_docs:   isYes(d.q23||'') ? 'نعم' : 'لا',
-    has_guarantees:   isYes(d.q24||'') ? 'نعم' : 'لا',
-    guarantee_types:  d.q25 ? lookup(GUARANTEES,  d.q25) : '',
-    other_guarantee:  d.q26 || '',
-    crops_last3:      d.q27 ? lookup(CROPS,       d.q27) : '',
-    yield_sesame:     d.q28 || '',
-    yield_sorghum:    d.q29 || '',
-    yield_groundnut:  d.q30 || '',
-    yield_cotton:     d.q31 || '',
-    yield_watermelon: d.q32 || '',
-    yield_millet:     d.q33 || '',
-    yield_sunflower:  d.q34 || '',
-    finance_source:   FINANCE_HOW[d.q35] || d.q35 || '',
-    finance_amount:   d.q36 || '',
-    repaid:           d.q37 ? (isYes(d.q37) ? 'نعم' : 'لا') : '',
-    no_repay_reason:  d.q38 ? NO_REPAY[d.q38]   || d.q38 : '',
-    finance_use:      d.q39 ? lookup(FINANCE_USE, d.q39) : '',
-    finance_bank:     d.q40 ? BANKS[d.q40]       || d.q40 : '',
-    preferred_crops:  d.q41 ? lookup(CROPS,       d.q41) : '',
-    why_preferred:    d.q42 || '',
-    finance_crop:     d.q43 ? CROPS[d.q43]       || d.q43 : '',
-    seed_variety:     d.q44 || '',
-    use_fertiliser:   isYes(d.q45||'') ? 'نعم' : 'لا',
-    use_pesticides:   isYes(d.q46||'') ? 'نعم' : 'لا',
-    requested_amount: d.q47 || '',
-    marital_status:   MARITAL[d.q48]   || d.q48 || '',
-    wives:            d.q49 || '',
-    has_children:     d.q50 ? (isYes(d.q50) ? 'نعم' : 'لا') : '',
-    total_children:   d.q51 || '',
-    children_under18: d.q52 || '',
-    other_dependents: d.q53 ? (isYes(d.q53) ? 'نعم' : 'لا') : '',
-    dependents_count: d.q54 || '',
-    other_income:     d.q55 ? (isYes(d.q55) ? 'نعم' : 'لا') : '',
-    income_sources:   d.q56 ? lookup(INCOME_SRC, d.q56) : '',
-    remittances:      d.q57 || '',
-    challenges:       d.q58 || '',
-    timestamp:        new Date().toISOString()
+    first_name:         nameParts[0] || '',
+    second_name:        nameParts[1] || '',
+    third_name:         nameParts[2] || '',
+    fourth_name:        nameParts[3] || '',
+    dob:                d.q2  || '',
+    gender:             d.q3==='1' ? 'ذكر' : 'أنثى',
+    phone_primary:      d.q4  || '',
+    phone_secondary:    d.q5  || '',
+    has_id:             isYes(d.q6||'') ? 'نعم' : 'لا',
+    id_number:          d.q7  || '',
+    id_photo:           d.q8  || '',
+    state:              STATES[d.q9] || '',
+    locality:           localityName,
+    education:          EDUCATION[d.q11] || '',
+    has_smartphone:     isYes(d.q12||'') ? 'نعم' : 'لا',
+    network_coverage:   isYes(d.q13||'') ? 'نعم' : 'لا',
+    best_network:       NETWORKS[d.q14] || '',
+    has_bank:           isYes(d.q15||'') ? 'نعم' : 'لا',
+    banks:              d.q16 ? lookup(BANKS, d.q16) : '',
+    banking_apps:       d.q17 ? lookup(BANK_APPS, d.q17) : '',
+    other_bank:         d.q18 || '',
+    union_member:       isYes(d.q19||'') ? 'نعم' : 'لا',
+    union_name:         d.q20 || '',
+    farm_size:          d.q21 || '',
+    land_ownership:     d.q22==='1' ? 'مملوكة' : 'مستأجرة',
+    rent_tenure:        RENT_TENURE[d.q23] || '',
+    ownership_docs:     isYes(d.q24||'') ? 'نعم' : 'لا',
+    has_guarantees:     isYes(d.q25||'') ? 'نعم' : 'لا',
+    guarantee_types:    d.q26 ? lookup(GUARANTEES, d.q26) : '',
+    other_guarantee:    d.q27 || '',
+    crops_last3:        d.q28 ? lookup(CROPS, d.q28) : '',
+    yield_sesame:       d.q29 || '',
+    yield_sorghum:      d.q30 || '',
+    yield_groundnut:    d.q31 || '',
+    yield_cotton:       d.q32 || '',
+    yield_watermelon:   d.q33 || '',
+    yield_millet:       d.q34 || '',
+    yield_sunflower:    d.q35 || '',
+    finance_source:     FINANCE_HOW[d.q36] || '',
+    other_finance:      d.q37 || '',
+    finance_amount:     d.q38 || '',
+    repaid:             d.q39 ? (isYes(d.q39) ? 'نعم' : 'لا') : '',
+    no_repay_reason:    NO_REPAY[d.q40] || '',
+    other_repay_reason: d.q41 || '',
+    finance_use:        d.q42 ? lookup(FINANCE_USE, d.q42) : '',
+    finance_bank:       BANKS[d.q43] || '',
+    other_finance_bank: d.q44 || '',
+    preferred_crops:    d.q45 ? lookup(CROPS, d.q45) : '',
+    crop_reason:        d.q46 ? lookup(CROP_REASON, d.q46) : '',
+    other_crop_reason:  d.q47 || '',
+    finance_crop:       CROPS[d.q48] || '',
+    seed_variety:       (() => {
+      const varieties = getVarieties(d.q48 || '')
+      return varieties[parseInt(d.q49)-1] || d.q49 || ''
+    })(),
+    other_variety:      d.q50 || '',
+    use_fertiliser:     isYes(d.q51||'') ? 'نعم' : 'لا',
+    no_fertiliser_reason: d.q52 ? lookup(NO_INPUT_REASON, d.q52) : '',
+    other_no_fertiliser:  d.q53 || '',
+    use_pesticides:     isYes(d.q54||'') ? 'نعم' : 'لا',
+    no_pesticides_reason: d.q55 ? lookup(NO_INPUT_REASON, d.q55) : '',
+    other_no_pesticides:  d.q56 || '',
+    requested_amount:   d.q57 || '',
+    marital_status:     MARITAL[d.q58] || '',
+    wives:              d.q59 || '',
+    has_children:       d.q60 ? (isYes(d.q60) ? 'نعم' : 'لا') : '',
+    total_children:     d.q61 || '',
+    children_under18:   d.q62 || '',
+    other_dependents:   d.q63 ? (isYes(d.q63) ? 'نعم' : 'لا') : '',
+    dependents_count:   d.q64 || '',
+    other_income:       isYes(d.q65||'') ? 'نعم' : 'لا',
+    income_sources:     d.q66 ? lookup(INCOME_SRC, d.q66) : '',
+    remittances:        d.q67 || '',
+    consent:            d.q68 === '1' ? 'أقر وأوافق' : '',
+    timestamp:          new Date().toISOString()
   }
 }
 
@@ -573,23 +686,32 @@ export default async function handler(req, res) {
   for (const message of messages) {
     const phone = message.from
     if (isAlreadyProcessed(message.id)) continue
+
+    // Handle image messages for ID photo step
+    if (message.type === 'image') {
+      await handleMessage(phone, '__IMAGE__', message)
+      continue
+    }
+
     if (message.type !== 'text') {
       await sendWhatsApp(phone, 'يرجى الرد برسالة نصية فقط.')
       continue
     }
+
     const text = message.text.body.trim()
     if (!text) continue
-    await handleMessage(phone, text)
+    await handleMessage(phone, text, message)
   }
 
   return res.status(200).json({ status: 'ok' })
 }
 
 // ─── Main message handler ─────────────────────────────────────────────────────
-async function handleMessage(phone, text) {
+async function handleMessage(phone, text, message = {}) {
   const session = await getSession(phone)
   if (session.completed) return
 
+  // ── Not greeted ──────────────────────────────────────────────────────────────
   if (!session.greeted) {
     session.greeted = true
     await saveSession(phone, session)
@@ -597,8 +719,10 @@ async function handleMessage(phone, text) {
     return
   }
 
+  // ── Not started — wait for ١ ─────────────────────────────────────────────────
   if (!session.started) {
-    if (text === '1') {
+    const normalized = text.replace(/[١٢٣٤٥٦٧٨٩٠]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    if (normalized === '1') {
       session.started = true
       session.step = 1
       session.last_activity = Date.now()
@@ -607,55 +731,78 @@ async function handleMessage(phone, text) {
         sendWhatsApp(phone, getQuestion(1, session.data))
       ])
     } else {
-      await sendWhatsApp(phone, 'اكتب  *1*  للبدء في التسجيل')
+      await sendWhatsApp(phone, 'اكتب  *١*  للبدء في التسجيل')
     }
     return
   }
 
-  // ── User resuming after reminder ─────────────────────────────────────────
- if (session.awaiting_resume) {
-  if (text === '2') {
-    session.awaiting_resume = false
+  // ── Awaiting resume after reminder ──────────────────────────────────────────
+  if (session.awaiting_resume) {
+    const normalized = text.replace(/[١٢٣٤٥٦٧٨٩٠]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    if (normalized === '2') {
+      session.awaiting_resume = false
+      session.last_activity = Date.now()
+      await Promise.all([
+        saveSession(phone, session),
+        sendWhatsApp(phone, getQuestion(session.step, session.data))
+      ])
+    } else {
+      await sendWhatsApp(phone, 'اكتب  *٢*  للمتابعة من حيث توقفت.')
+    }
+    return
+  }
+
+  // ── ID photo step ────────────────────────────────────────────────────────────
+  if (session.step === 8) {
+    if (text !== '__IMAGE__') {
+      await sendWhatsApp(phone, 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.')
+      return
+    }
+    // Store image ID for reference
+    const imageId = message.image?.id || 'photo_received'
+    session.data.q8 = imageId
     session.last_activity = Date.now()
+    session.step = 9
     await Promise.all([
       saveSession(phone, session),
-      sendWhatsApp(phone, getQuestion(session.step, session.data))
+      sendWhatsApp(phone, getQuestion(9, session.data))
     ])
-  } else {
-    await sendWhatsApp(phone,
-      `اكتب  *2*  للمتابعة من حيث توقفت.`
-    )
+    return
   }
-  return
-}
 
-  // ── Normal flow ──────────────────────────────────────────────────────────
-  const error = validateAnswer(session.step, text)
+  // ── Normalize Arabic numerals for all inputs ─────────────────────────────────
+  const normalizedText = text
+    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/،/g, ',')
+
+  // ── Validate ─────────────────────────────────────────────────────────────────
+  const error = validateAnswer(session.step, normalizedText, session.data)
   if (error) {
     await sendWhatsApp(phone, error)
     return
   }
 
-  session.data[`q${session.step}`] = text
+  session.data[`q${session.step}`] = normalizedText
   session.last_activity = Date.now()
-  const nextStep = getNextStep(session.step, text)
+  const nextStep = getNextStep(session.step, normalizedText, session.data)
 
-if (nextStep > TOTAL_STEPS) {
-  const row = buildSheetsRow(phone, session.data)
+  // ── Completed ────────────────────────────────────────────────────────────────
+  if (nextStep > TOTAL_STEPS) {
+    const row = buildRow(phone, session.data)
 
-  // Save everything first
-  await Promise.all([
-    saveToSheets(row),
-    saveToFirestore(phone, row),
-    saveSession(phone, { completed: true, step: TOTAL_STEPS, started: true, greeted: true, data: {} })
-  ])
+    await Promise.all([
+      saveToSheets(row),
+      saveToFirestore(phone, row),
+      saveSession(phone, { completed: true, step: TOTAL_STEPS, started: true, greeted: true, data: {} })
+    ])
 
-  // Then send confirmation separately
-  await sendWhatsApp(phone,
-    `تم التسجيل بنجاح ✓\n────────────────────────\nشكراً لك. سيتواصل معك فريقنا قريباً.\n\nنتمنى لك موسماً زراعياً موفقاً.`
-  )
-  return
-}
+    await sendWhatsApp(phone,
+      `تم التسجيل بنجاح ✓\n────────────────────────\nشكراً لك. سيتواصل معك فريقنا قريباً.\n\nنتمنى لك موسماً زراعياً موفقاً.`
+    )
+    return
+  }
+
+  // ── Next question ─────────────────────────────────────────────────────────────
   session.step = nextStep
   await Promise.all([
     saveSession(phone, session),
