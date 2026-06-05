@@ -560,6 +560,7 @@ function getNextStep(step, answer, data) {
     }
     case 36: return t === '1' ? 38 : 45     // bank → amount, else → preferred crops
     case 37: return 45                       // other finance → preferred crops
+    case 36: return t === '1' ? 38 : t === '5' ? 37 : 45
     case 39: return isYes(t) ? 42 : 40      // repaid → use, not repaid → why
     case 40: return t === '4' ? 41 : 42     // other reason → specify, else → use
     case 41: return 42
@@ -644,7 +645,7 @@ function buildRow(phone, d) {
     yield_sunflower:    d.q35 || '',
     finance_source:     FINANCE_HOW[d.q36] || '',
     other_finance:      d.q37 || '',
-    finance_amount:   (data.q38 || '').replace(/,|،/g, ''),
+    finance_amount:   (d.q38 || '').replace(/,|،/g, ''), 
     repaid:             d.q39 ? (isYes(d.q39) ? 'نعم' : 'لا') : '',
     no_repay_reason:    NO_REPAY[d.q40] || '',
     other_repay_reason: d.q41 || '',
@@ -666,7 +667,7 @@ function buildRow(phone, d) {
     use_pesticides:     isYes(d.q54||'') ? 'نعم' : 'لا',
     no_pesticides_reason: d.q55 ? lookup(NO_INPUT_REASON, d.q55) : '',
     other_no_pesticides:  d.q56 || '',
-    requested_amount: (data.q57 || '').replace(/,|،/g, ''),
+    requested_amount: (d.q57 || '').replace(/,|،/g, ''), 
     marital_status:     MARITAL[d.q58] || '',
     wives:              d.q59 || '',
     has_children:       d.q60 ? (isYes(d.q60) ? 'نعم' : 'لا') : '',
