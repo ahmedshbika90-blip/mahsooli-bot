@@ -49,13 +49,9 @@ function isNo(val)  { return val === '2' }
 
 // ─── Progress header ──────────────────────────────────────────────────────────
 function header(step) {
-  const pct = Math.round((step / TOTAL_STEPS) * 100)
-  const filled = Math.round(pct / 10)
-  const bar = '■'.repeat(filled) + '□'.repeat(10 - filled)
   const ar = n => n.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
-  return `${bar}  ${ar(pct)}٪  •  ${ar(step)} / ${ar(TOTAL_STEPS)}\n\n`
+  return `السؤال ${ar(step)} من ${ar(TOTAL_STEPS)}\n\n`
 }
-
 // ─── Welcome message ──────────────────────────────────────────────────────────
 const WELCOME = `*برنامج التمويل الزراعي*
 البنك الزراعي السوداني بالشراكة مع محصولي
@@ -210,7 +206,10 @@ function getQuestion(step, data = {}) {
 
 أكثر من اختيار: مثال  ١,٣`
 
-    case 18: return `${h}اذكر اسم البنك`
+   case 18: {
+  const fromBank = (data.q16 || '').includes('8') && !data.q17
+  return `${h}${fromBank ? 'اذكر اسم البنك' : 'اذكر اسم التطبيق البنكي'}`
+}
 
     case 19: return `${h}*القسم الثالث — الزراعة والتمويل*
 ────────────────────────
@@ -525,8 +524,9 @@ function getNextStep(step, answer, data) {
     case 7:  return 8                        // ID number → photo
     case 8:  return 9                        // photo → state
     case 15: return isYes(t) ? 16 : 19      // has bank → which banks, else → union
-    case 16: return t.includes('8') ? 18 : 17  // other bank → name, else → apps
-    case 18: return 17                       // other bank name → apps
+    case 16: return t.includes('8') ? 18 : 17   // other bank → step 18
+    case 17: return t.includes('8') ? 18 : 19   // other app → step 18
+    case 18: return 19                           // either other → union
     case 19: return isYes(t) ? 20 : 21      // union → name, else → farm
     case 22: return t === '2' ? 23 : 24     // rented → tenure, owned → docs
     case 23: return 25                       // tenure → guarantees
