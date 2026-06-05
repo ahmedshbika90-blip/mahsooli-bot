@@ -49,8 +49,20 @@ function isNo(val)  { return val === '2' }
 
 // ─── Progress header ──────────────────────────────────────────────────────────
 function header(step) {
+  const sections = [
+    { label: 'البيانات الشخصية',      steps: [1,2,3,4,5,6,7,8] },
+    { label: 'بيانات السكن والتواصل', steps: [9,10,11,12,13,14,15,16,17,18] },
+    { label: 'الزراعة والتمويل',      steps: [19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44] },
+    { label: 'المحاصيل وطلب التمويل', steps: [45,46,47,48,49,50,51,52,53,54,55,56,57] },
+    { label: 'بيانات الأسرة',          steps: [58,59,60,61,62,63,64,65,66,67,68] },
+  ]
+
   const ar = n => n.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
-  return `السؤال ${ar(step)} من ${ar(TOTAL_STEPS)}\n\n`
+  const current = sections.findIndex(s => s.steps.includes(step))
+  const sectionNum = current + 1
+  const label = sections[current]?.label || ''
+
+  return `القسم ${ar(sectionNum)} من ${ar(sections.length)}  •  ${label}\n\n`
 }
 // ─── Welcome message ──────────────────────────────────────────────────────────
 const WELCOME = `*برنامج التمويل الزراعي*
