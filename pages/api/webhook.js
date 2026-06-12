@@ -4,7 +4,8 @@ import { saveToSheets } from '../../lib/sheets'
 import { getSession, saveSession } from '../../lib/firebase'
 import { saveToFirestore } from '../../lib/firestore'
 import { isAlreadyProcessed } from '../../utils/session'
-
+import { verifyNationalId } from '../../lib/claude'
+import { downloadMedia }    from '../../lib/media'
 const TOTAL_STEPS = 68
 
 // ─── Lookup tables ────────────────────────────────────────────────────────────
@@ -127,16 +128,9 @@ function getQuestion(step, data = {}) {
 
 اكتب  لا يوجد  إذا لم يكن لديك`
 
-    case 6: return `${h}هل لديك بطاقة إثبات شخصية؟
-(رقم وطني / جواز سفر / بطاقة قومية)
+   case 6: return isYes(t) ? 8 : 9
 
-١ — نعم
-٢ — لا`
-
-    case 7: return `${h}رقم بطاقة إثبات الشخصية
-
-١١ رقماً بالضبط
-مثال: ١٢٣٤٥٦٧٨٩٠١`
+  
 
     case 8: return `${h}أرسل صورة واضحة لبطاقة إثبات الشخصية
 
@@ -782,23 +776,55 @@ async function handleMessage(phone, text, message = {}) {
   }
 
   // ── ID photo step ────────────────────────────────────────────────────────────
-  if (session.step === 8) {
-    if (text !== '__IMAGE__') {
-      await sendWhatsApp(phone, 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.')
-      return
-    }
-    // Store image ID for reference
-    const imageId = message.image?.id || 'photo_received'
-    session.data.q8 = imageId
-    session.last_activity = Date.now()
-    session.step = 9
-    await Promise.all([
-      saveSession(phone, session),
-      sendWhatsApp(phone, getQuestion(9, session.data))
-    ])
+ if (session.step === 8) {
+  if (text !== '__IMAGE__') {
+    await sendWhatsApp(phone, 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.')
     return
   }
 
+  const mediaId = message.image?.id
+  if (!mediaId) {
+    await sendWhatsApp(phone, 'لم نتمكن من استلام الصورة. يرجى المحاولة مرة أخرى.')
+    return
+  }
+
+  // Let user know we're processing
+  await sendWhatsApp(phone, 'جارٍ التحقق من الصورة...')
+
+  // Download image from 360dialog
+  const media = await downloadMedia(mediaId)
+  if (!media) {
+    await sendWhatsApp(phone, 'تعذر تحميل الصورة. يرجى إرسالها مرة أخرى.')
+    return
+  }
+
+  // Verify with Claude
+  const result = await verifyNationalId(media.base64, media.mimeType)
+
+  if (!result.is_valid_id) {
+    await sendWhatsApp(phone,
+      `❌ لم نتمكن من التحقق من الصورة.\n${result.reason || 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.'}\n\nأرسل الصورة مرة أخرى.`
+    )
+    return
+  }
+
+  // Valid ID — save image ID and extracted number
+  session.data.q8  = mediaId
+  session.data.q7  = result.id_number || session.data.q7 || ''
+  session.last_activity = Date.now()
+  session.step = 9
+
+  const confirmMsg = result.id_number
+    ? `✅ تم التحقق من الهوية بنجاح.\nرقم الهوية: ${result.id_number}`
+    : `✅ تم التحقق من الهوية بنجاح.`
+
+  await sendWhatsApp(phone, confirmMsg)
+  await Promise.all([
+    saveSession(phone, session),
+    sendWhatsApp(phone, getQuestion(9, session.data))
+  ])
+  return
+}
   // ── Normalize Arabic numerals for all inputs ─────────────────────────────────
   const normalizedText = text
     .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
