@@ -1,0 +1,19 @@
+Hi,
+
+I have prepared the E1.3 Pilot Launch Check.
+
+The file applies the CHIRPS rainfall lookup to the first registered farmers,
+snapping each GPS point to its 0.05 deg grid cell and cross-checking the V5 score
+against the source lookup. Any farmer outside coverage is escalated for manual
+review rather than scored.
+
+Escalated for manual review (outside CHIRPS coverage, not scored):
+  - F006
+
+Status: Ready - 5 scored, 1 escalated for manual review
+
+Please review and confirm the following statement:
+
+"I confirm that the V5 rainfall scores calculate correctly for the 5 in-AOI farmers. The following are outside CHIRPS coverage and are escalated for manual review before approval: F006."
+
+Generated date: 2026-06-09
