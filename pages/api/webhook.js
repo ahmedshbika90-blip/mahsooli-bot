@@ -534,6 +534,7 @@ function getYieldSteps(cropsAnswer) {
 
 // ─── Skip logic ───────────────────────────────────────────────────────────────
 function getNextStep(step, answer, data) {
+  if (!answer) return step + 1  // ← add this guard
   const t = answer.trim()
 
   switch(step) {
