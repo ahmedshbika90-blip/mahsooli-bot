@@ -1,0 +1,28 @@
+# Mahala CHIRPS pipeline dependencies.
+# Everything else (downloading, gzip, CSV, .env parsing) uses the Python standard library.
+#
+# Pinned to the versions the pipeline was validated against, so a fresh install
+# reproduces the committed outputs. rasterio ships GDAL/PROJ in its wheels, so a
+# plain `pip install` works on macOS/Windows/Linux without a system GDAL.
+numpy==2.4.6
+rasterio==1.5.0
+
+# tools/google_sheets_lookup.py builds the Excel workbook.
+openpyxl==3.1.5
+
+# Optional: only for `tools/google_sheets_lookup.py --upload-google-drive`, which
+# publishes the workbook as a live Google Sheet. Uncomment to install.
+# A headless / CI service-account upload (GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO) needs
+# only the first two; google-auth-oauthlib is for the local browser OAuth flow.
+# google-api-python-client==2.149.0
+# google-auth==2.36.0
+# google-auth-oauthlib==1.2.1   # local browser OAuth flow only
+
+# Optional: only for the NDVI sub-pipeline (ndvi_run_pipeline.py), which
+# pulls Sentinel-2 NDVI from Google Earth Engine and writes a Google Sheets tab.
+# earthengine-api pulls in google-auth + google-api-python-client transitively;
+# pin them so the raw Sheets v4 client is reproducible. gspread is NOT needed.
+# Uncomment to install (the CHIRPS pipeline does not need these).
+# earthengine-api==1.4.3
+# google-api-python-client==2.149.0
+# google-auth==2.36.0
