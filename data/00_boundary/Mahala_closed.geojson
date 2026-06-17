@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "closed": true,
+        "closure_method": "extended_first_last_segments",
+        "closure_lon": 35.722517545316,
+        "closure_lat": 13.345281219172
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              35.722517545316,
+              13.345281219172
+            ],
+            [
+              35.724168,
+              13.346036
+            ],
+            [
+              36.050023,
+              13.495055
+            ],
+            [
+              36.155768,
+              13.279661
+            ],
+            [
+              35.808731,
+              13.115123
+            ],
+            [
+              35.722857,
+              13.344375
+            ],
+            [
+              35.722517545316,
+              13.345281219172
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}
