@@ -12,7 +12,8 @@
   **June–September seasonal total (mm)**.
 - **Spatial resolution / CRS:** 0.05° grid, EPSG:4326 (lon/lat WGS84). The Mahala
   boundary is in the same CRS, so no reprojection is performed.
-- **Period:** 2014–2024.
+- **Period:** 2014–2024 inclusive. These start/end years were client-approved,
+  even though the PDF wording says "10-year".
 
 ## Processing summary
 
@@ -35,18 +36,18 @@
 
 ## Documented decisions & anomalies
 
-- **Period — 11 inclusive years used (original brief said "10-year").** 2014–2024 inclusive is
-  11 years. This was a deliberate choice (more years → a more stable average);
-  log/confirm with the client. Changing `START_YEAR`/`END_YEAR` in `.env` and
-  re-running regenerates the table for any other period.
+- **Period — 11 inclusive years used.** 2014–2024 inclusive is 11 years; this
+  matches the client-approved start/end dates. Changing `START_YEAR`/`END_YEAR`
+  in `.env` and re-running regenerates the table for any other approved period.
 - **Zero score variance — every cell scores 10.** All AOI averages are ≥ 350 mm, so
   the V5 rainfall score is **10 for all 52 cells** and does not differentiate
   farmers within this AOI. **Recommendation:** raise with Mahsooli whether the
   rubric thresholds or the AOI need revisiting so the rainfall variable can
   discriminate risk.
-- **Boundary closure.** The source boundary was an open line; it was closed into a
-  polygon by extending its terminal segments to their intersection (recorded in the
-  output GeoJSON as `closure_method: extended_first_last_segments`).
+- **Boundary source.** The pipeline uses the GeoJSON provided by the client.
+  The source boundary was an open line; it was closed into a polygon by extending
+  its terminal segments to their intersection (recorded in the output GeoJSON as
+  `closure_method: extended_first_last_segments`).
 - **Full-Africa download retained.** Step 0 downloads the full Africa monthly raster
   and then clips, rather than requesting a Gedaref bounding-box subset. Kept as-is so
   output stays byte-identical to this validated run; a bbox subset is recorded as an
@@ -57,5 +58,5 @@
 
 Pinned dependencies (`numpy==2.4.6`, `rasterio==1.5.0`, Python 3.12) and a fixed
 `.env` make the run reproducible: `python run_pipeline.py` regenerates the average
-raster and lookup CSV; `python tools/snap_score.py` verifies GPS→score on the sample
-farmers.
+raster and lookup CSV; `python tools/snap_score.py` verifies GPS→score on the
+configured farmer file (`SNAP_FARMERS_CSV`, default `data/farmers/farmers.csv`).

@@ -16,8 +16,8 @@ script already puts the repo root on sys.path). Three building blocks:
 Exit codes (documented in docs/ndvi/HANDOVER.md):
     0 success | 1 unexpected | 2 invalid input | 3 missing prerequisite
     4 EE auth/config | 5 EE transient (after retries) | 6 incomplete/corrupt output
-    7 Google Drive upload failed | 8 Google Sheet push failed
-    (7 and 8: local artifacts are intact)
+    7 GCS upload failed | 8 Google Sheet push failed | 9 required imagery export failed
+    (7, 8 and 9: local artifacts are intact)
 """
 
 import csv

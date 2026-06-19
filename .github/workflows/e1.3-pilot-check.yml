@@ -1,0 +1,103 @@
+# E1.3 - Pilot Launch Check
+#
+# The sign-off gate before the first farmer approvals. Applies the E1.1 rainfall
+# lookup to the first N registered farmers, cross-checks every score two independent
+# ways, and writes a sign-off package (XLSX with a live VLOOKUP, a flat CSV, and a
+# plain-language sign-off request). A score MISMATCH fails the run = sign-off BLOCKED.
+#
+# HOW THE PM RUNS IT:
+#   Actions tab -> "E1.3 - Pilot Launch Check" -> Run workflow.
+#   Leave "limit" blank for the standard check of every registered farmer row.
+#   A GREEN run means the V5 scores compute correctly and the sign-off package is
+#   ready (download it from Artifacts).
+#   A RED run means a score mismatch was found and sign-off is blocked - read the log.
+#
+# No credentials needed. It reuses the committed E1.1 lookup CSV in data/05_tables/,
+# so run E1.1 at least once first.
+
+name: E1.3 - Pilot Launch Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Optional number of first registered farmers to check (blank = all rows)"
+        required: false
+        default: ""
+      farmers_csv:
+        description: "Farmer registry CSV (blank = config.SNAP_FARMERS_CSV)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  pilot-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check the E1.1 lookup CSV exists
+        run: |
+          if ! ls data/05_tables/Mahala_CHIRPS_grid_lookup_*.csv >/dev/null 2>&1; then
+            echo "::error::No E1.1 lookup CSV found in data/05_tables/. Run the 'E1.1 - CHIRPS Rainfall Lookup Table' workflow first."
+            exit 1
+          fi
+
+      - name: Run the pilot launch check
+        env:
+          # Archive the sign-off package to GCS (gs://GCS_BUCKET/<date>/e1.3-pilot/).
+          # GCS reuses the Earth Engine service account; no separate key needed.
+          GCS_ARCHIVE: ${{ vars.GCS_ARCHIVE }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          EE_PROJECT_ID: ${{ vars.EE_PROJECT_ID }}
+          GEE_SERVICE_ACCOUNT_INFO: ${{ secrets.GEE_SERVICE_ACCOUNT_INFO }}
+          GCS_SERVICE_ACCOUNT_INFO: ${{ secrets.GCS_SERVICE_ACCOUNT_INFO }}
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.limit }}" ]; then
+            ARGS="$ARGS --limit ${{ inputs.limit }}"
+          fi
+          if [ -n "${{ inputs.farmers_csv }}" ]; then
+            ARGS="$ARGS --farmers-csv ${{ inputs.farmers_csv }}"
+          fi
+          python tools/pilot_launch_check.py $ARGS
+
+      - name: Upload sign-off package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e1.3-pilot-signoff
+          path: data/pilot_check/*
+          if-no-files-found: warn
+
+      - name: Commit sign-off package back to the repo
+        if: always()
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/pilot_check
+          if git diff --staged --quiet; then
+            echo "No sign-off changes to commit."
+            exit 0
+          fi
+          git commit -m "E1.3: refresh pilot sign-off package [skip ci]"
+          # Another workflow may push to the same branch while this runs; rebase + retry.
+          for i in 1 2 3 4 5; do
+            git pull --rebase --autostash origin "$GITHUB_REF_NAME" \
+              && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            echo "Push attempt $i failed (remote moved); retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::Could not push sign-off package after 5 attempts."
+          exit 1

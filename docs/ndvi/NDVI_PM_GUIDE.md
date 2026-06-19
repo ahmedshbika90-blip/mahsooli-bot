@@ -34,7 +34,7 @@ Each row is one plot for one cycle, with these columns:
 
 | Column | What it means |
 |---|---|
-| **Mahsooli ID** | The plot's ID (donor plots are BP001–BP008 for now). |
+| **Mahsooli ID** | The plot's ID. Donor baseline plots use `BP...`; registered farmer rows use their Mahsooli IDs. |
 | **Date** | The day this reading was taken. |
 | **NDVI value** | How green the field is now (higher = healthier; ~0.1 bare soil, ~0.6+ healthy crop). |
 | **Baseline value** | How green a normal field in this sector is in this week of the season. |
@@ -64,10 +64,20 @@ treat irrigated alerts as advisory for now.
 Every run saves, for each plot: a true-colour photo (`_rgb.png`), a crop-greenness
 map (`_ndvi.png`), and the raw clipped satellite data (`_s2.tif`, `_ndvi.tif`) plus a
 `run_log.json` describing the run. They are stored in a folder named after the run
-date — in the GitHub Actions run's **Artifacts** ("ndvi-run"), and, when Drive
-archiving is enabled, in **Google Drive → `E1.2_runs` → `<date>_cycle`**. To get
+date — in the GitHub Actions run's **Artifacts** ("ndvi-run"), and, when archiving
+is enabled, in **Google Cloud Storage → `<GCS_BUCKET>` → `E1.2_runs` → `<date>_cycle`**. To get
 pictures for any other plot or period, the technical contact runs e.g.
 `python ndvi/exports.py --plot BP003 --season 2023`.
+
+**Looking for just the baseline NDVI?** The NDVI greenness rasters are also collected
+into one dedicated, easy-to-browse folder so you don't have to open each run folder:
+
+- **Baseline NDVI:** `<GCS_BUCKET>` → `ndvi` → `baseline` → `<date>` — one
+  `_ndvi.tif` per donor plot/season, the imagery behind the sector baseline.
+- **Each cycle's NDVI:** `<GCS_BUCKET>` → `ndvi` → `current` → `<date>`.
+
+The numeric baseline values per sector and week live alongside, in the run folder's
+`baseline_sector.csv` (and the **Sector_Baseline** tab of the Google Sheet).
 
 ## When you see "Yes"
 

@@ -1,8 +1,8 @@
 # Setup: APIs & credentials (local and GitHub Actions)
 
 This is the **one-time** guide for the parts of the project that talk to Google:
-the **NDVI crop-health monitor** (Earth Engine + Google Sheets) and the
-optional **Step-5 Google Drive upload**. Follow it once, and the project runs both
+the **NDVI crop-health monitor** (Earth Engine + Google Sheets) and the optional
+**Google Cloud Storage run archive**. Follow it once, and the project runs both
 on your machine and headlessly on GitHub Actions.
 
 If you only need the CHIRPS rainfall score table (steps 0–4 in the
@@ -17,10 +17,11 @@ uses public CHIRPS data and runs out of the box.
 |---|---|---|
 | CHIRPS pipeline (`0`–`3`) + farmer scoring (`4`) + E1.3 pilot check | **No** | none (public CHIRPS data) |
 | **NDVI monitor** (`ndvi_run_pipeline.py`, the E1.2 workflow) | **Yes** | Earth Engine + Google Sheets |
-| Step-5 Drive upload (`tools/google_sheets_lookup.py --upload-google-drive`, E1.1 option) | Optional | Google Drive |
+| NDVI run archive (`NDVI_GCS_ARCHIVE=true`) | Optional | Google Cloud Storage |
 
-The same **one service account** can serve Earth Engine, Sheets, and Drive — you
-do **not** need three different keys.
+The same **one service account** can serve Earth Engine, Sheets, and Cloud Storage —
+you do **not** need separate keys. The archive bucket lives in the same Cloud
+project as Earth Engine, so the GCS archive reuses the Earth Engine credentials.
 
 ### How a credential is supplied: file path (local) vs. JSON contents (CI)
 
@@ -32,7 +33,7 @@ file path.**
 | Credential | Local (`.env`) — a **file path** | GitHub Actions — the **JSON contents** | Read in code |
 |---|---|---|---|
 | Earth Engine + Sheets key | `GEE_SERVICE_ACCOUNT_JSON` | `GEE_SERVICE_ACCOUNT_INFO` | `ndvi/ee_auth.py`, `ndvi/sheets.py` |
-| Drive upload key | `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` | `GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO` | `tools/google_sheets_lookup.py` |
+| GCS archive key *(optional; reuses the EE key if unset)* | `GCS_SERVICE_ACCOUNT_JSON` | `GCS_SERVICE_ACCOUNT_INFO` | `gcs.py` |
 | Earth Engine project | `EE_PROJECT_ID` (a plain ID, same value both places) | | |
 | Output Sheet | `NDVI_SHEET_ID` (a plain ID, same value both places) | | |
 
@@ -48,8 +49,8 @@ a PM can pick the right one. Only E1.2 needs credentials to do its core job.
 
 | Workflow (Actions tab) | File | Secrets | Variables |
 |---|---|---|---|
-| **E1.1 - CHIRPS Rainfall Lookup Table** | `e1.1-chirps-lookup.yml` | `GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO` *(optional — only to publish the live Sheet)* | `GOOGLE_DRIVE_FOLDER` *(optional, has a default)* |
-| **E1.2 - NDVI Crop-Health Monitor** | `e1.2-ndvi-monitor.yml` | `GEE_SERVICE_ACCOUNT_INFO` **(required)** | `EE_PROJECT_ID`, `NDVI_SHEET_ID` **(required)** |
+| **E1.1 - CHIRPS Rainfall Lookup Table** | `e1.1-chirps-lookup.yml` | none | none |
+| **E1.2 - NDVI Crop-Health Monitor** | `e1.2-ndvi-monitor.yml` | `GEE_SERVICE_ACCOUNT_INFO` **(required)**, `GCS_SERVICE_ACCOUNT_INFO` *(optional)* | `EE_PROJECT_ID`, `NDVI_SHEET_ID` **(required)**; `GCS_BUCKET`, `NDVI_GCS_ARCHIVE` *(optional)* |
 | **E1.3 - Pilot Launch Check** | `e1.3-pilot-check.yml` | none | none |
 
 All three commit their small deliverables back to the repo (and upload them as
@@ -69,11 +70,11 @@ these in order.
    pick an existing one), and copy its **Project ID** (e.g. `mahala-monitor-123`).
    → this is your **`EE_PROJECT_ID`**.
 
-2. **Enable the three APIs.**
+2. **Enable the APIs.**
    In the project, open **APIs & Services → Library** and enable each of:
    - **Earth Engine API**
    - **Google Sheets API**
-   - **Google Drive API** (needed by Sheets writes and the optional Step-5 upload)
+   - **Cloud Storage API** (only if you use the optional GCS run archive — Step 6)
 
 3. **Register the project for Earth Engine** (web-only — cannot be scripted).
    Open, replacing the placeholder with your Project ID:
@@ -142,9 +143,9 @@ Verifying on your machine first makes CI failures much easier to diagnose.
    python ndvi_run_pipeline.py
    ```
 4. **Expected:** rows appear in the `NDVI_Log` tab of your Sheet. With no
-   `NDVI_FARMERS_CSV` set, it uses the tracked demo registry
-   `docs/sample_ndvi_farmers.csv`; point `NDVI_FARMERS_CSV` at your real (local,
-   git-ignored) registry for production runs.
+   `NDVI_FARMERS_CSV` set, it uses `data/farmers/farmers.csv`; point
+   `NDVI_FARMERS_CSV` at a private/git-ignored registry when production farmer
+   data cannot be committed.
 
 ---
 
@@ -176,14 +177,17 @@ Repo → **Settings → Secrets and variables → Actions → Secrets** tab →
 |---|---|
 | `GEE_SERVICE_ACCOUNT_INFO` | the full key JSON contents from step 5.1 |
 
-### 5.3 Add two Variables
+### 5.3 Add Variables
 
-Same page → **Variables** tab → **New repository variable** (add both):
+Same page → **Variables** tab → **New repository variable**:
 
 | Name | Value |
 |---|---|
 | `EE_PROJECT_ID` | your Project ID (step 2.1) |
 | `NDVI_SHEET_ID` | your Sheet ID (step 3.2) |
+| `NDVI_MONITOR_FARMERS` | `true` (default if omitted) |
+| `NDVI_FARMERS_CSV` | optional path to a private farmer CSV available to the runner |
+| `NDVI_REQUIRE_EXPORTS` | `true` (default if omitted; required raw imagery failures block green runs) |
 
 > The names must match **exactly** — the workflow reads
 > `${{ secrets.GEE_SERVICE_ACCOUNT_INFO }}`, `${{ vars.EE_PROJECT_ID }}`, and
@@ -196,7 +200,7 @@ Same page → **Variables** tab → **New repository variable** (add both):
 - **Run it manually:** repo → **Actions** tab → **E1.2 - NDVI Crop-Health Monitor**
   → **Run workflow** (you can leave the date blank for "today").
 - **Or wait for the schedule:** it runs automatically on the **1st, 11th, and
-  21st at 06:00 UTC, June–September** (`cron: "0 6 1,11,21 6-9 *"`).
+  21st at 06:00 UTC, January–March and June–December** (`cron: "0 6 1,11,21 1-3,6-12 *"`).
 - CI installs only `earthengine-api`, `google-api-python-client`, and
   `google-auth` — **not** `google-auth-oauthlib`, which is only for the local
   browser sign-in flow.
@@ -206,20 +210,31 @@ the run authenticates headlessly and writes to your Sheet.
 
 ---
 
-## 6. Optional: Step-5 Google Drive upload in CI
+## 6. Optional: Google Cloud Storage run archive
 
-If you also want `tools/google_sheets_lookup.py --upload-google-drive` to run in CI,
-it follows the same pattern with a different secret:
+To mirror each NDVI run folder (imagery + tables + run log) to a bucket for
+traceability, set up a bucket in the **same Cloud project** as Earth Engine. No new
+credential is needed — the archive reuses the EE service account.
 
-- Store the key JSON **contents** in a secret named
-  `GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO` (it can be the **same** service account).
-- Set `GOOGLE_DRIVE_FOLDER` to a **Shared Drive** (or a folder shared with the
-  service-account email). A plain personal "My Drive" folder fails — service
-  accounts have no personal Drive storage.
-- Set `GOOGLE_DRIVE_UPLOAD=true`.
+1. **Create the bucket** (Console → Cloud Storage, or):
+   ```bash
+   gcloud storage buckets create gs://<your-bucket> \
+     --project <EE_PROJECT_ID> --location <region>
+   ```
+2. **Grant the EE service account write access** (the `client_email` from the key
+   JSON):
+   ```bash
+   gcloud storage buckets add-iam-policy-binding gs://<your-bucket> \
+     --member "serviceAccount:<service-account-email>" \
+     --role roles/storage.objectAdmin
+   ```
+3. **Enable archiving:** set the Variables `GCS_BUCKET=<your-bucket>` and
+   `NDVI_GCS_ARCHIVE=true` (locally in `.env`, or as CI Variables on the E1.2
+   workflow). To use a *separate* key instead of the EE credentials, set the secret
+   `GCS_SERVICE_ACCOUNT_INFO`; otherwise leave it empty and the EE key is reused.
 
-See the ready-made `env:` snippet in the README under
-[**Automated / CI upload (GitHub Actions)**](../README.md#automated--ci-upload-github-actions).
+Re-uploads are idempotent: objects of unchanged size are skipped unless
+`GCS_OVERWRITE=true`.
 
 ---
 
@@ -227,10 +242,11 @@ See the ready-made `env:` snippet in the README under
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| Actions tab is empty / no workflows listed | The `.github/workflows/` folder is not on the repo's **default branch** — often dropped when a ZIP is unzipped/uploaded (it's a hidden folder), or the files landed on a non-default branch. | Commit the hidden `.github/workflows/` folder (the three `.yml` files) to the default branch. The branch may be named `main` — it need not be `develop`. |
 | `GEE_SERVICE_ACCOUNT_INFO is not valid JSON` | The secret value is truncated, escaped, or not the full file. | Re-copy the **entire** key file and paste it as-is into the secret. |
 | Earth Engine init fails / "not registered" | The project was never registered for Earth Engine. | Complete step 2.3 at `code.earthengine.google.com/register?project=<PROJECT_ID>`. |
 | `403` / permission denied writing the Sheet | Sheet not shared with the service account. | Share the Sheet as **Editor** with the service-account email (step 3.3). |
-| "service accounts have no storage" / Drive upload fails | Uploading into a personal "My Drive" folder. | Point `GOOGLE_DRIVE_FOLDER` at a **Shared Drive** or a shared folder. |
+| GCS archive fails with `403` / `AccessDenied` | The service account lacks write access to the bucket. | Grant `roles/storage.objectAdmin` on `GCS_BUCKET` to the service-account email (Step 6.2). |
 | EE calls denied despite a valid key | Missing roles. | Grant `serviceusage.serviceUsageConsumer` **and** Earth Engine **Writer** (step 2.5). |
 | `EE_PROJECT_ID is required` | Variable not set or misnamed. | Add `EE_PROJECT_ID` (CI Variable, or `.env` locally). |
 

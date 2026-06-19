@@ -11,14 +11,15 @@ dependencies = [
     "openpyxl==3.1.5",
 ]
 
-# Optional: only needed for `python tools/google_sheets_lookup.py --upload-google-drive`,
-# which publishes the workbook as a live Google Sheet. Install with:
-#     pip install "mahala-chirps-pipeline[gdrive]"   (or pip install the three libs)
+# Optional: only needed for the NDVI sub-pipeline (ndvi_run_pipeline.py) and its
+# Google Cloud Storage run archive (NDVI_GCS_ARCHIVE). Install with:
+#     pip install "mahala-chirps-pipeline[ndvi]"
 [project.optional-dependencies]
-gdrive = [
+ndvi = [
+    "earthengine-api==1.4.3",
     "google-api-python-client==2.149.0",
     "google-auth==2.36.0",
-    "google-auth-oauthlib==1.2.1",
+    "google-cloud-storage==2.19.0",
 ]
 
 # Scripts-only project (run-as-scripts pipeline), not an installable package.

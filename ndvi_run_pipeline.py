@@ -12,7 +12,7 @@ This is a SEPARATE pipeline from the CHIRPS rainfall chain (run_pipeline.py): it
 uses Google Earth Engine, needs EE/Sheets credentials, and runs on the in-season
 monitoring cadence. Whether step 2 writes to the Google Sheet is controlled by
 NDVI_SHEET_PUSH in .env, imagery export by NDVI_EXPORT_ENABLED, and the Google
-Drive run archive by NDVI_DRIVE_ARCHIVE (no flags needed here).
+Cloud Storage run archive by NDVI_GCS_ARCHIVE (no flags needed here).
 
 Steps:
     ndvi/registry.py   Load + validate the baseline-donor plot registry (local)

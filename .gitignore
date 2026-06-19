@@ -18,6 +18,9 @@ CLAUDE.md
 CLAUDE.local.md
 .mcp.json
 
+# --- Reference docs (kept local only; never commit) ---
+docs/PRD_Engagement1_E1.1-E1.3.md
+
 # --- Local secrets / machine config ---
 .env
 credentials.json

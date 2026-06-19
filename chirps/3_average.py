@@ -304,6 +304,22 @@ def process() -> None:
     print(f"Average folder:         {config.AVERAGE_DIR}")
     print(f"CSV table folder:       {config.TABLE_DIR}")
 
+    # Archive the CHIRPS deliverables (+ seasonal totals for traceability) to GCS,
+    # classified by date: gs://GCS_BUCKET/<date>/e1.1-chirps/. Off by default; the
+    # local outputs above are intact, so a GCS failure is reported but never lost.
+    if config.GCS_ARCHIVE:
+        from datetime import date
+        from gcs import upload_files_to_gcs, date_first_dest
+
+        two_col = csv_path.with_name(
+            csv_path.name.replace("grid_lookup", "score_lookup_2col")
+        )
+        deliverables = [
+            config.CLOSED_GEOJSON, avg_tif, csv_path, two_col, config.SEASONAL_DIR,
+        ]
+        dest = date_first_dest(date.today().isoformat(), "e1.1-chirps")
+        upload_files_to_gcs(deliverables, dest, "E1.1")
+
 
 if __name__ == "__main__":
     process()

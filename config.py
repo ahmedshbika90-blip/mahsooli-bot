@@ -129,7 +129,10 @@ CLOSED_GEOJSON = BOUNDARY_DIR / "Mahala_closed.geojson"
 # and an id column (farmer_id, mahsooli_id or id) and re-run snap_score (and
 # google_sheets_lookup for a
 # fresh workbook). Distinct from the NDVI registry (NDVI_FARMERS_CSV) below, which
-# has a stricter schema. See load_farmers() below.
+# has a stricter schema. See load_farmers() below. The default is the tracked demo
+# file docs/sample_farmers.csv so CI (which only has git-tracked files after
+# checkout) runs out of the box; point it at data/farmers/farmers.csv (git-ignored,
+# PII) in .env for production.
 SNAP_FARMERS_CSV = _get_path("SNAP_FARMERS_CSV", "docs/sample_farmers.csv")
 
 
@@ -188,34 +191,6 @@ NODATA = float(_get("NODATA", "-9999.0"))
 # CHIRPS grid cell size in degrees. Cell centres fall at .x25 / .x75 and are the
 # basis for the grid_key used to join farmer coordinates to the lookup table.
 CELL_SIZE = float(_get("CELL_SIZE", "0.05"))
-
-
-# -----------------------------------------------------------------------------
-# Optional Google Drive upload (used by tools/google_sheets_lookup.py)
-# -----------------------------------------------------------------------------
-
-# Off by default so a plain run never touches the network; enable with the
-# --upload-google-drive flag or GOOGLE_DRIVE_UPLOAD=true (matches .env.example / README).
-GOOGLE_DRIVE_UPLOAD = _get_bool("GOOGLE_DRIVE_UPLOAD", False)
-GOOGLE_DRIVE_FOLDER = _get("GOOGLE_DRIVE_FOLDER", "1reRAocMZMRgd402RP2RGJEpE0hcl54ZF")
-_default_google_drive_oauth_client = ""
-if (REPO_ROOT / "credentials.json").exists():
-    _default_google_drive_oauth_client = "credentials.json"
-
-GOOGLE_DRIVE_OAUTH_CLIENT_JSON = _get_path(
-    "GOOGLE_DRIVE_OAUTH_CLIENT_JSON",
-    _default_google_drive_oauth_client,
-)
-GOOGLE_DRIVE_OAUTH_TOKEN_JSON = _get_path(
-    "GOOGLE_DRIVE_OAUTH_TOKEN_JSON",
-    ".tokens/google-drive-upload-token.json",
-)
-GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = _get_path("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
-
-# Service-account key as raw JSON content (for CI/GitHub Secrets — no file on disk).
-# When set, this wins over the *_JSON file path and the OAuth-user browser flow, so
-# a deployed run authenticates headlessly. Parsed by tools/google_sheets_lookup.py.
-GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO = _get("GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO", "")
 
 
 def make_grid_key(lat: float, lon: float) -> str:
@@ -370,6 +345,12 @@ GEE_SERVICE_ACCOUNT_INFO = _get("GEE_SERVICE_ACCOUNT_INFO", "")
 # account can serve both Earth Engine and the Sheets export.
 GEE_SERVICE_ACCOUNT_JSON = _get_path("GEE_SERVICE_ACCOUNT_JSON")
 
+# --- Google Cloud Storage credentials (NDVI run archive) ---
+# The archive bucket lives in the same Cloud project as Earth Engine, so GCS
+# reuses the EE service account by default. Set these only to use a separate key.
+GCS_SERVICE_ACCOUNT_INFO = _get("GCS_SERVICE_ACCOUNT_INFO", "")  # key JSON content (CI)
+GCS_SERVICE_ACCOUNT_JSON = _get_path("GCS_SERVICE_ACCOUNT_JSON")  # key file path (local)
+
 # --- Sentinel-2 / NDVI ---
 S2_COLLECTION = _get("S2_COLLECTION", "COPERNICUS/S2_SR_HARMONIZED")
 NDVI_NIR_BAND = _get("NDVI_NIR_BAND", "B8")
@@ -449,8 +430,9 @@ if NDVI_DEFAULT_SECTOR not in NDVI_SECTORS:
 
 # Whether the 10-day cycle ALSO monitors the financed-farmer registry
 # (NDVI_FARMERS_CSV -> farmers_normalized.csv) in addition to the donor plots.
-# Off until real financed farmers are registered - the old M001-M010 demo
-# points are retired and must not silently reappear in the log.
+# Off by default so an out-of-the-box run (CI, demo registry) stays donor-only and
+# the retired M001-M010 demo points never silently reappear in the log. Production
+# opts in via the repo variables NDVI_MONITOR_FARMERS=true + NDVI_FARMERS_CSV=<real>.
 NDVI_MONITOR_FARMERS = _get_bool("NDVI_MONITOR_FARMERS", False)
 
 # Earth Engine call behaviour (mirrors DOWNLOAD_RETRIES/DOWNLOAD_TIMEOUT for CHIRPS).
@@ -482,7 +464,7 @@ NDVI_ABS_DROP_FLOOR = float(_get("NDVI_ABS_DROP_FLOOR", "0.05"))
 # they only write into one shared with them. ndvi/current writes by this ID.
 NDVI_SHEET_ID = _get("NDVI_SHEET_ID", "")
 NDVI_SHEET_TAB = _get("NDVI_SHEET_TAB", "NDVI_Log")
-# Off by default so a plain run never touches the network (mirrors GOOGLE_DRIVE_UPLOAD).
+# Off by default so a plain run never touches the network (mirrors NDVI_GCS_ARCHIVE).
 NDVI_SHEET_PUSH = _get_bool("NDVI_SHEET_PUSH", False)
 
 # --- Area-of-interest bounding boxes for flagging stray farmer GPS ---
@@ -516,6 +498,10 @@ AOI_BOXES = {
 # (when NDVI_EXPORT_ENABLED) and on demand via the CLI. Bands default to the
 # four 10 m native bands so nothing is silently resampled.
 NDVI_EXPORT_ENABLED = _get_bool("NDVI_EXPORT_ENABLED", True)
+# When export is enabled, a missing raw-imagery artifact is an acceptance problem:
+# the run must tell the PM/client why the raw files were not produced instead of
+# silently going green with only the numeric CSV.
+NDVI_REQUIRE_EXPORTS = _get_bool("NDVI_REQUIRE_EXPORTS", True)
 # Also export imagery for the baseline DONOR plots (one set per usable season)
 # so the raw Sentinel-2 / NDVI rasters behind each sector baseline are archived
 # alongside the numeric CSVs - not just the monitored farmers' cycle imagery.
@@ -540,14 +526,32 @@ NDVI_EXPORT_NDVI_PALETTE = _get(
 NDVI_EXPORT_NDVI_MIN = float(_get("NDVI_EXPORT_NDVI_MIN", "-0.2"))
 NDVI_EXPORT_NDVI_MAX = float(_get("NDVI_EXPORT_NDVI_MAX", "0.8"))
 
-# --- Google Drive run archive (traceability) ---
+# --- Google Cloud Storage run archive (traceability) ---
 # When enabled, each baseline/cycle run mirrors its local run folder
 # (data/ndvi/runs/<date>_<kind>/: imagery + table copies + run_log.json) to
-# GOOGLE_DRIVE_FOLDER / NDVI_DRIVE_ARCHIVE_ROOT / <folder name> so any result
-# can be traced back to its inputs, config and errors. Off by default so a
-# plain run never touches the network (mirrors NDVI_SHEET_PUSH).
-NDVI_DRIVE_ARCHIVE = _get_bool("NDVI_DRIVE_ARCHIVE", False)
-NDVI_DRIVE_ARCHIVE_ROOT = _get("NDVI_DRIVE_ARCHIVE_ROOT", "E1.2_runs")
+# gs://GCS_BUCKET/GCS_ARCHIVE_PREFIX/<folder name>/ so any result can be traced
+# back to its inputs, config and errors. Off by default so a plain run never
+# touches the network (mirrors NDVI_SHEET_PUSH). Re-uploads are idempotent:
+# objects of unchanged size are skipped unless GCS_OVERWRITE=true.
+# Master switch: archive EVERY epic's deliverables (E1.1 CHIRPS, E1.2 NDVI,
+# E1.3 pilot check) to GCS, classified date-first as gs://GCS_BUCKET/<date>/<epic>/.
+# NDVI_GCS_ARCHIVE is kept as a back-compat alias that still enables E1.2 on its own.
+GCS_ARCHIVE = _get_bool("GCS_ARCHIVE", False)
+NDVI_GCS_ARCHIVE = _get_bool("NDVI_GCS_ARCHIVE", False)
+# True when the E1.2 NDVI steps should archive (either switch turns it on).
+NDVI_ARCHIVE_ENABLED = GCS_ARCHIVE or NDVI_GCS_ARCHIVE
+GCS_BUCKET = _get("GCS_BUCKET", "")
+# Optional top-level folder inside the bucket (empty = bucket root). Use it only
+# when the bucket is shared with unrelated data; the date-first scheme lives under it.
+GCS_DATA_PREFIX = _get("GCS_DATA_PREFIX", "")
+# Legacy prefix from the E1.2-only archive; superseded by the date-first scheme.
+GCS_ARCHIVE_PREFIX = _get("GCS_ARCHIVE_PREFIX", "E1.2_runs")
+GCS_OVERWRITE = _get_bool("GCS_OVERWRITE", False)
+# Dedicated, browsable folder holding only the NDVI GeoTIFFs (baseline + current),
+# separate from the full E1.2_runs/ run archive, so clients can find them directly:
+# gs://GCS_BUCKET/NDVI_TIFF_PREFIX/<baseline|current>/<date>/. Mirrored by the same
+# NDVI_GCS_ARCHIVE switch that drives archive_run_dir_to_gcs().
+NDVI_TIFF_PREFIX = _get("NDVI_TIFF_PREFIX", "ndvi")
 NDVI_RUNS_DIR = NDVI_DIR / "runs"
 
 

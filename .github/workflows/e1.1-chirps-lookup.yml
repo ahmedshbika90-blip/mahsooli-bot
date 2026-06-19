@@ -1,0 +1,101 @@
+# E1.1 - CHIRPS Rainfall Lookup Table
+#
+# Builds the grid-keyed rainfall-score lookup CSV for the Mahala AOI: downloads
+# CHIRPS v2.0 monthly rasters, clips them to the boundary, averages the June-Sep
+# season over the configured years, and writes the 1-10 score lookup. Then snaps the
+# configured farmer rows to their cells and builds the VLOOKUP workbook (local .xlsx).
+#
+# HOW THE PM RUNS IT:
+#   Actions tab -> "E1.1 - CHIRPS Rainfall Lookup Table" -> Run workflow.
+#   Leave the inputs blank for the standard 2014-2024 run.
+#
+# This is heavy and rare: it downloads several GB of rasters and takes ~30-60 min.
+# Run it only when the year range changes; the committed lookup CSV is reused by
+# E1.3 in between. The CSV + .xlsx deliverables are committed back to the repo and
+# uploaded as run artifacts - no external storage is used.
+
+name: E1.1 - CHIRPS Rainfall Lookup Table
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "Start year (blank = config default 2014)"
+        required: false
+        default: ""
+      end_year:
+        description: "End year (blank = config default 2024)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  chirps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build the rainfall lookup (download -> clip -> average -> lookup CSV)
+        env:
+          # Blank inputs fall through to the config.py defaults (2014/2024).
+          START_YEAR: ${{ inputs.start_year }}
+          END_YEAR: ${{ inputs.end_year }}
+          # Drop the .tif.gz archives after unzip to roughly halve peak disk use
+          # (the runner has ~14 GB free; raw CHIRPS is several GB).
+          KEEP_GZ: "false"
+          # Archive deliverables to GCS, classified by date (gs://GCS_BUCKET/<date>/e1.1-chirps/).
+          # GCS reuses the Earth Engine service account; no separate key needed.
+          GCS_ARCHIVE: ${{ vars.GCS_ARCHIVE }}
+          GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+          EE_PROJECT_ID: ${{ vars.EE_PROJECT_ID }}
+          GEE_SERVICE_ACCOUNT_INFO: ${{ secrets.GEE_SERVICE_ACCOUNT_INFO }}
+          GCS_SERVICE_ACCOUNT_INFO: ${{ secrets.GCS_SERVICE_ACCOUNT_INFO }}
+        run: python run_pipeline.py
+
+      - name: Snap configured farmers to their grid cells
+        run: python tools/snap_score.py
+
+      - name: Build VLOOKUP workbook (local .xlsx)
+        run: python tools/google_sheets_lookup.py
+
+      - name: Upload deliverables as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e1.1-chirps-lookup
+          path: |
+            data/05_tables/*.csv
+            data/05_tables/*.xlsx
+            data/04_average/*
+          if-no-files-found: warn
+
+      - name: Commit deliverables back to the repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/00_boundary data/04_average data/05_tables
+          if git diff --staged --quiet; then
+            echo "No deliverable changes to commit."
+            exit 0
+          fi
+          git commit -m "E1.1: refresh CHIRPS lookup deliverables [skip ci]"
+          # Another workflow may push to the same branch while this runs; rebase + retry.
+          for i in 1 2 3 4 5; do
+            git pull --rebase --autostash origin "$GITHUB_REF_NAME" \
+              && git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            echo "Push attempt $i failed (remote moved); retrying in 5s..."
+            sleep 5
+          done
+          echo "::error::Could not push deliverables after 5 attempts."
+          exit 1

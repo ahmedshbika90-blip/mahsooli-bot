@@ -2,7 +2,7 @@
 NDVI shared helper - structured per-run log for error traceability (stdlib only).
 
 Every baseline / current / exports run writes a run_log.json into its dated
-run folder (data/ndvi/runs/<YYYY-MM-DD>_<kind>/), which the Drive archive then
+run folder (data/ndvi/runs/<YYYY-MM-DD>_<kind>/), which the GCS archive then
 mirrors. The log captures what a future debugging session needs to reconstruct
 the run: parameters, a whitelisted config snapshot (never credentials), the
 per-plot statuses, skipped seasons, every artifact produced, and any errors -
@@ -19,7 +19,7 @@ import config
 from pipeline_utils import write_json_atomic
 
 # Settings worth snapshotting per run. Deliberately a whitelist: secrets
-# (GEE_*, GOOGLE_DRIVE_*, NDVI_SHEET_ID) must never end up in an archived log.
+# (GEE_*, GCS_*, NDVI_SHEET_ID) must never end up in an archived log.
 _CONFIG_SNAPSHOT_KEYS = [
     "S2_COLLECTION", "CLOUD_MASK_METHOD", "SCL_DROP_CLASSES",
     "CLOUD_SCORE_PLUS_MIN", "NDVI_SCALE_M", "FARMER_RADIUS_M",

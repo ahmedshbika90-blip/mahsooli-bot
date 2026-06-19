@@ -33,7 +33,7 @@ Implementation notes:
     the caller / run log as "no imagery") - never an error.
 
 Output (CLI): data/ndvi/runs/<today>_export/imagery/ + run_log.json
-              (--upload mirrors the run folder to Google Drive)
+              (--upload mirrors the run folder to Google Cloud Storage)
 """
 
 import argparse
@@ -208,7 +208,7 @@ def parse_args():
     parser.add_argument("--out", default=None,
                         help="Output folder (default: data/ndvi/runs/<today>_export).")
     parser.add_argument("--upload", action="store_true",
-                        help="Mirror the run folder to Google Drive when done.")
+                        help="Mirror the run folder to Google Cloud Storage when done.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print the export plan and exit (no Earth Engine).")
     return parser.parse_args()
@@ -314,10 +314,10 @@ def main() -> int:
           f"failures={failures} window={start}_{end}")
     print(f"Run log: {log_path}")
 
-    if args.upload or config.NDVI_DRIVE_ARCHIVE:
-        from gdrive import archive_run_dir  # repo root; deps needed only on use
+    if args.upload or config.NDVI_GCS_ARCHIVE:
+        from gcs import archive_run_dir_to_gcs  # repo root; deps needed only on use
 
-        archive_run_dir(run_dir, STEP)
+        archive_run_dir_to_gcs(run_dir, STEP)
 
     # Any failed plot makes the CLI exit nonzero: a 7-of-8-plots-failed export
     # must not read as success to automation (details are in the run log).

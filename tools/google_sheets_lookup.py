@@ -1,6 +1,5 @@
 """
-Create ONE Excel workbook with a working VLOOKUP demo, and optionally publish
-it as a live Google Sheet (standalone helper).
+Create ONE Excel workbook with a working VLOOKUP demo (standalone helper).
 
 This version is made to be robust in Excel and Google Sheets:
 
@@ -18,52 +17,26 @@ Why:
   Some Excel installs do not immediately calculate formulas written by openpyxl,
   or they repair the workbook and leave formula cells blank. If D is blank,
   VLOOKUP returns #N/A. Writing D as a value makes the demo reliable.
-  (Google Sheets recalculates VLOOKUP on open, so the published Sheet always
-  shows live results.)
 
 Output:
-    data/05_tables/Mahala_VLOOKUP.xlsx       (always written locally)
-    On upload, a live Google Sheet at https://docs.google.com/spreadsheets/...
+    data/05_tables/Mahsooli_CHIRPS_..._processed_<date>.xlsx  (written locally)
 
 Run:
   python tools/google_sheets_lookup.py
-    python tools/google_sheets_lookup.py --upload-google-drive
 
 Dependency:
   python -m pip install openpyxl
-
-Optional Google Drive upload (publishes a NATIVE Google Sheet, not a raw .xlsx):
-        - Easiest for a personal Drive folder: set GOOGLE_DRIVE_OAUTH_CLIENT_JSON
-            to a Desktop OAuth client JSON and sign in once in the browser.
-        - Alternative for automation: set GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON to a
-            service-account JSON key and share the target folder with that email.
-            NOTE: service accounts have no personal Drive storage, so creating a
-            Sheet in a normal "My Drive" folder fails with a storage-quota error;
-            use a Shared Drive (or the OAuth-user flow) for that case.
-    - Pass --upload-google-drive or set GOOGLE_DRIVE_UPLOAD=true.
-
-The .xlsx is uploaded with its target mimeType set to a Google Sheet, so Drive
-imports and converts it on the fly. The result lives at docs.google.com and is
-re-imported in place on later runs (matched by name + appProperties marker, so
-there are no duplicates).
-
-Additional upload dependencies:
-        python -m pip install google-api-python-client google-auth google-auth-oauthlib
 """
 
 import argparse
 import csv
-import importlib
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root, for `import config` (assumes one level below root)
 import config
-from gdrive import (  # shared Drive plumbing (moved out of this tool)
-    build_drive_service,
-    resolve_google_drive_folder_id,
-)
+from snap_score import OUT_OF_AOI_MESSAGE
 
 
 try:
@@ -88,27 +61,12 @@ BASE_DOC_NAME = "Mahsooli_CHIRPS_v2_RainfallLookup_Gedaref_2014-2024"
 
 OUT_XLSX = config.TABLE_DIR / f"{BASE_DOC_NAME}_processed_{PROCESSING_DATE}.xlsx"
 
-# Name of the published Google Sheet. A native Sheet has no .xlsx extension.
-DRIVE_DOC_NAME = f"{BASE_DOC_NAME}_processed_{PROCESSING_DATE}"
-# appProperties marker so we can re-find and update the same Sheet regardless of
-# its name/extension (a name-only match breaks once Drive converts to a Sheet).
-DRIVE_APP_TAG_KEY = "mahsooli_artifact"
-DRIVE_APP_TAG_VALUE = "mahala_vlookup"
-
-DEMO_SAMPLE_COUNT = 5
-# mimeType of the local file we upload as the request body...
-XLSX_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-# ...and the target mimeType that tells Drive to convert it to a native Sheet.
-GOOGLE_SHEETS_MIMETYPE = "application/vnd.google-apps.spreadsheet"
-
-
 def choose_output_workbook_path(preferred_path: Path) -> Path:
     """
     Pick a writable output path.
 
     If today's workbook is already open in Excel, Windows may lock it for writes.
-    In that case, save to a timestamp-suffixed sibling file instead of failing
-    before the Google Drive upload step.
+    In that case, save to a timestamp-suffixed sibling file instead of failing.
     """
     if not preferred_path.exists():
         return preferred_path
@@ -125,137 +83,11 @@ def choose_output_workbook_path(preferred_path: Path) -> Path:
 
 
 def parse_args():
-    """CLI flags for optional post-processing actions."""
+    """CLI flags for the workbook generator."""
     parser = argparse.ArgumentParser(
-        description="Create the Excel workbook and optionally upload it to Google Drive."
-    )
-    parser.add_argument(
-        "--upload-google-drive",
-        action="store_true",
-        help="Upload the generated workbook to the configured Google Drive folder.",
+        description="Create the Excel rainfall-lookup workbook locally."
     )
     return parser.parse_args()
-
-
-# resolve_google_drive_folder_id / build_drive_service* now live in gdrive.py
-# (imported above) so the NDVI run-archiver shares the exact same auth rules.
-
-
-def find_existing_sheet(service, folder_id: str):
-    """
-    Find a previously published Sheet to update in place.
-
-    Matched by the appProperties marker (survives the .xlsx -> Sheet name
-    change), with a name fallback for Sheets created before the marker existed.
-    Returns the file id, or None.
-    """
-    queries = [
-        # Primary: our marker, regardless of name/extension.
-        (
-            f"appProperties has {{ key='{DRIVE_APP_TAG_KEY}' and "
-            f"value='{DRIVE_APP_TAG_VALUE}' }} and "
-            f"'{folder_id}' in parents and trashed = false"
-        ),
-        # Fallback: legacy artifacts named by this script (Sheet or raw .xlsx).
-        (
-            f"(name = '{DRIVE_DOC_NAME}' or name = '{DRIVE_DOC_NAME}.xlsx') and "
-            f"'{folder_id}' in parents and trashed = false"
-        ),
-    ]
-
-    for query in queries:
-        files = service.files().list(
-            q=query,
-            spaces="drive",
-            fields="files(id, name, webViewLink)",
-            pageSize=1,
-            includeItemsFromAllDrives=True,
-            supportsAllDrives=True,
-        ).execute().get("files", [])
-        if files:
-            return files[0]["id"]
-
-    return None
-
-
-def upload_workbook_to_google_drive(workbook_path: Path):
-    """
-    Publishes the workbook as a NATIVE Google Sheet in the configured folder.
-
-    The local .xlsx is uploaded as the request body, but the target mimeType is
-    set to a Google Sheet, so Drive converts it on import. The result is a live
-    spreadsheet at docs.google.com, not a raw .xlsx download. Re-runs update the
-    same Sheet in place (matched by the appProperties marker).
-    """
-    folder_id = resolve_google_drive_folder_id(config.GOOGLE_DRIVE_FOLDER)
-
-    try:
-        drive_errors = importlib.import_module("googleapiclient.errors")
-        drive_http = importlib.import_module("googleapiclient.http")
-    except ImportError as e:
-        raise RuntimeError(
-            "Missing Google Drive dependencies. Install them with:\n"
-            "    python -m pip install google-api-python-client google-auth google-auth-oauthlib"
-        ) from e
-
-    service, auth_mode = build_drive_service()
-    media = drive_http.MediaFileUpload(
-        str(workbook_path),
-        mimetype=XLSX_MIMETYPE,
-        resumable=False,
-    )
-
-    try:
-        existing_id = find_existing_sheet(service, folder_id)
-
-        if existing_id:
-            # Re-import the xlsx into the existing Sheet. No mimeType in the body:
-            # the file is already a Sheet and Drive re-converts the uploaded media.
-            result = service.files().update(
-                fileId=existing_id,
-                body={
-                    "name": DRIVE_DOC_NAME,
-                    "appProperties": {DRIVE_APP_TAG_KEY: DRIVE_APP_TAG_VALUE},
-                },
-                media_body=media,
-                fields="id, name, webViewLink",
-                supportsAllDrives=True,
-            ).execute()
-            action = "updated"
-        else:
-            # Target mimeType = Google Sheet tells Drive to convert on import.
-            result = service.files().create(
-                body={
-                    "name": DRIVE_DOC_NAME,
-                    "parents": [folder_id],
-                    "mimeType": GOOGLE_SHEETS_MIMETYPE,
-                    "appProperties": {DRIVE_APP_TAG_KEY: DRIVE_APP_TAG_VALUE},
-                },
-                media_body=media,
-                fields="id, name, webViewLink",
-                supportsAllDrives=True,
-            ).execute()
-            action = "uploaded"
-    except drive_errors.HttpError as e:
-        auth_hint = ""
-        if auth_mode == "service_account":
-            auth_hint = (
-                " Note: service accounts have no personal Drive storage, so creating a "
-                "Sheet in a normal 'My Drive' folder fails. Use a Shared Drive, or "
-                "download your Desktop OAuth client JSON and set GOOGLE_DRIVE_OAUTH_CLIENT_JSON instead."
-            )
-        raise RuntimeError(
-            "Google Drive upload failed. Check GOOGLE_DRIVE_FOLDER and make sure the "
-            f"folder is accessible to the configured Google auth identity.{auth_hint}"
-        ) from e
-
-    return {
-        "action": action,
-        "id": result["id"],
-        "name": result["name"],
-        "webViewLink": result.get("webViewLink", ""),
-        "auth_mode": auth_mode,
-    }
 
 
 def find_latest_detailed_lookup() -> Path:
@@ -332,6 +164,31 @@ def load_lookup_rows(lookup_csv: Path):
     return rows
 
 
+def build_demo_rows(farmers, lookup_by_grid_key):
+    """
+    Build workbook demo rows from supplied farmer GPS coordinates.
+
+    The workbook is the client-facing VLOOKUP proof, so it must exercise the same
+    farmer coordinates that snap_score/pilot_check use, not synthetic grid centers.
+    """
+    rows = []
+    for farmer in farmers:
+        lat = farmer["lat"]
+        lon = farmer["lon"]
+        clat, clon = config.snap_to_grid_center(lat, lon)
+        grid_key = config.make_grid_key(clat, clon)
+        match = lookup_by_grid_key.get(grid_key)
+        rows.append({
+            "farmer_id": farmer["id"],
+            "lat": lat,
+            "lon": lon,
+            "grid_key": grid_key,
+            "score_1_10": match["score_1_10"] if match else "",
+            "note": "" if match else OUT_OF_AOI_MESSAGE,
+        })
+    return rows
+
+
 def style_sheet(ws):
     """
     Simple readable formatting.
@@ -359,7 +216,7 @@ def style_sheet(ws):
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
 
-def create_workbook(rows, source_lookup_csv: Path):
+def create_workbook(rows, demo_rows, source_lookup_csv: Path, source_farmers_csv: Path):
     """
     Creates one workbook with:
       - score_lookup
@@ -413,19 +270,14 @@ def create_workbook(rows, source_lookup_csv: Path):
         "check_vlookup_matches_python",
     ])
 
-    sample_rows = rows[:DEMO_SAMPLE_COUNT]
-    if len(sample_rows) < DEMO_SAMPLE_COUNT:
-        raise ValueError(
-            f"Need at least {DEMO_SAMPLE_COUNT} valid lookup rows for demo. "
-            f"Found {len(sample_rows)}."
-        )
+    if not demo_rows:
+        raise ValueError(f"No farmer rows available for workbook demo: {source_farmers_csv}")
 
-    for excel_row_num, row in enumerate(sample_rows, start=2):
-        # Use existing grid-cell centres as sample farmer coordinates.
-        # grid_key is written directly as a text value so the VLOOKUP demo
-        # works immediately in Excel and Google Sheets.
-        lat = row["lat_center"]
-        lon = row["lon_center"]
+    for excel_row_num, row in enumerate(demo_rows, start=2):
+        # Use supplied farmer coordinates. grid_key is written directly as a text
+        # value so the VLOOKUP demo works immediately in Excel and Google Sheets.
+        lat = row["lat"]
+        lon = row["lon"]
         grid_key = row["grid_key"]
 
         # Working VLOOKUP formula:
@@ -436,7 +288,7 @@ def create_workbook(rows, source_lookup_csv: Path):
         )
 
         ws_demo.append([
-            f"F{excel_row_num - 1:03d}",
+            row["farmer_id"],
             lat,
             lon,
             grid_key,
@@ -472,7 +324,7 @@ def create_workbook(rows, source_lookup_csv: Path):
         f" =VLOOKUP(D2,'{LOOKUP_SHEET_NAME}'!A:B,2,FALSE)"
     )
     ws_demo[f"A{note_row + 4}"] = (
-        "For real farmer data, calculate grid_key from lat/lon using the same 0.05 degree CHIRPS grid rule, then copy the VLOOKUP formula down."
+        "Rows above use the configured farmer GPS file; for new farmer data, calculate grid_key from lat/lon using the same 0.05 degree CHIRPS grid rule, then copy the VLOOKUP formula down."
     )
     ws_demo[f"A{note_row + 5}"] = (
         f"Source detailed lookup CSV: {source_lookup_csv.name}"
@@ -492,13 +344,14 @@ def create_workbook(rows, source_lookup_csv: Path):
         ("Grid resolution", "0.05 degrees"),
         ("Season", "June-September"),
         ("Data period", "2014-2024"),
+        ("Period note", "Client-approved inclusive period; 2014-2024 contains 11 yearly seasons."),
         ("Download/processing date", PROCESSING_DATE),
         ("Scoring scale", ">=350 mm = 10; 250-349 mm = 7; 150-249 mm = 4; <150 mm = 1"),
         ("Lookup table tab", LOOKUP_SHEET_NAME),
         ("Demo tab", DEMO_SHEET_NAME),
         ("Source detailed lookup CSV", source_lookup_csv.name),
+        ("Source farmer CSV", str(source_farmers_csv)),
         ("Generated workbook name", out_xlsx.name),
-        ("Published Google Sheet name", DRIVE_DOC_NAME),
     ]
 
     for item, value in methodology_rows:
@@ -529,22 +382,21 @@ def main():
 
     rows = load_lookup_rows(lookup_csv)
     print(f"Valid lookup rows loaded: {len(rows)}")
+    lookup_by_grid_key = {row["grid_key"]: row for row in rows}
 
-    out_xlsx = create_workbook(rows, lookup_csv)
-    upload_enabled = args.upload_google_drive or config.GOOGLE_DRIVE_UPLOAD
-    drive_file = None
+    farmers_csv = config.SNAP_FARMERS_CSV
+    if farmers_csv is None or not farmers_csv.exists():
+        raise FileNotFoundError(
+            f"Farmer CSV not found: {farmers_csv}\n"
+            "Set SNAP_FARMERS_CSV to the client farmer file with id, lat, lon columns."
+        )
+    farmers = config.load_farmers(farmers_csv)
+    if not farmers:
+        raise ValueError(f"No valid farmer rows found in: {farmers_csv}")
+    demo_rows = build_demo_rows(farmers, lookup_by_grid_key)
+    print(f"Farmer demo rows loaded: {len(demo_rows)} from {farmers_csv}")
 
-    if upload_enabled:
-        print(f"Google Drive upload enabled -> target folder: {config.GOOGLE_DRIVE_FOLDER}")
-        try:
-            drive_file = upload_workbook_to_google_drive(out_xlsx)
-        except Exception as e:
-            raise SystemExit(
-                f"Workbook was saved locally at:\n"
-                f"    {out_xlsx}\n\n"
-                f"Google Drive upload failed:\n"
-                f"    {e}"
-            ) from e
+    out_xlsx = create_workbook(rows, demo_rows, lookup_csv, farmers_csv)
 
     print()
     print("=" * 90)
@@ -556,14 +408,6 @@ def main():
     print(f"  1. {LOOKUP_SHEET_NAME}")
     print(f"  2. {DEMO_SHEET_NAME}")
     print(f"  3. {METHODOLOGY_SHEET_NAME}")
-    if drive_file:
-        print()
-        print("Google Sheet (live, online):")
-        print(f"  Auth: {drive_file['auth_mode']}")
-        print(f"  {drive_file['action'].capitalize()}: {drive_file['name']}")
-        print(f"  File ID: {drive_file['id']}")
-        if drive_file["webViewLink"]:
-            print(f"  Open: {drive_file['webViewLink']}")
     print()
     print("Open the workbook. The VLOOKUP should return score_1_10 in farmers_demo column E.")
 

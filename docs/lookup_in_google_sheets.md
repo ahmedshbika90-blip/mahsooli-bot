@@ -5,12 +5,12 @@ rainfall score using the lookup table from the pipeline
 (`data/05_tables/Mahala_CHIRPS_grid_lookup_*.csv`).
 
 `tools/snap_score.py` is the runnable reference implementation of exactly this logic —
-run it to verify the formulas below on the sample farmers.
+run it to verify the formulas below on the configured farmer file.
 
 > **Local vs. Google Sheets:** the deliverable only requires a two-column lookup
 > *importable into Google Sheets* — the local CSV/`.xlsx` already satisfy that.
-> Publishing a live Sheet (`tools/google_sheets_lookup.py --upload-google-drive`) is an
-> optional convenience; there is no requirement to upload every CSV to Drive.
+> Import the `.xlsx` into Google Sheets manually if a live spreadsheet is wanted;
+> there is no requirement to publish it automatically.
 
 ## 1. Import the lookup table
 
@@ -54,19 +54,20 @@ helper range named `lookup2`):
 =IFNA(VLOOKUP(C2, lookup2!$A:$B, 2, FALSE), "Outside coverage area - escalate")
 ```
 
-## 4. Verify (≥5 sample farmers)
+## 4. Verify the configured farmer file
 
-`docs/sample_farmers.csv` (the default `SNAP_FARMERS_CSV`) has 6 coordinates (5 inside
-the AOI, 1 outside). Run:
+`SNAP_FARMERS_CSV` defaults to `data/farmers/farmers.csv`, the provided farmer
+file used by the E1.1 workbook and E1.3 pilot check. Run:
 
 ```bash
 python tools/snap_score.py
 ```
 
-Expected: `F001`–`F005` each return a score of **10**; `F006` (13.000, 35.000) is
-flagged as outside the coverage area. The same six rows pasted into the sheet with
-the formulas above must produce identical results — no `#N/A`.
+Expected: every in-AOI farmer returns a numeric score; any coordinate outside the
+client-provided GeoJSON coverage is flagged with the plain-English manual-review
+message instead of `#N/A`. The same rows pasted into the sheet with the formulas
+above must produce identical results.
 
-To score real farmers, set `SNAP_FARMERS_CSV` in `.env` to your own CSV (any file with
+To score a different farmer file, set `SNAP_FARMERS_CSV` in `.env` to your CSV (any file with
 `lat`, `lon` and an id column named `farmer_id`, `mahsooli_id` or `id`) and re-run
 `python tools/snap_score.py` — the pipeline (steps 0–3) does not need to re-run.

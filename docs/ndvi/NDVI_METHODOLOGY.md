@@ -14,7 +14,7 @@ when the crop is materially below normal. Results land in the `NDVI_Log` tab of
 the Mahsooli Google Sheet (7 columns) and a local CSV; each run also saves the
 per-plot **raw clipped Sentinel-2 imagery, NDVI raster (GeoTIFF) and RGB / NDVI
 quicklooks (PNG)** plus a structured run log, optionally mirrored to a dated
-Google Drive folder for traceability.
+Google Cloud Storage prefix for traceability.
 
 ## Data source
 
@@ -39,8 +39,10 @@ The baseline-donor registry (`data/farmers/baseline_plots.csv`, parsed by
   `radius = sqrt(area_feddan × 4200 m² / π)` (e.g. 850 feddan → 1 066 m). DMS
   coordinates (e.g. `13°59'45"N`) are converted automatically.
 
-Monitored financed farmers (later, via `NDVI_MONITOR_FARMERS`) stay point +
-`radius_m` circles with an optional `sector` column.
+Monitored financed farmers (via `NDVI_MONITOR_FARMERS`, default true) stay point +
+`radius_m` circles with an optional `sector` column. The default farmer file is
+`data/farmers/farmers.csv`; deployments can point `NDVI_FARMERS_CSV` at a private
+registry when PII cannot be committed.
 
 ## Cloud masking
 
@@ -143,9 +145,11 @@ The **baseline build** reuses the same exporter for the **donor plots**: with
 `NDVI_BASELINE_EXPORT_IMAGERY` (default on) it writes one artifact set per
 (donor plot, usable season) into `data/ndvi/runs/<date>_baseline/imagery/`, so the
 raw rasters behind each sector baseline are archived next to the CSVs — not only
-the per-plot-season-week NDVI numbers in `baseline_plot_seasons.csv`. Imagery is
-supplementary: the baseline CSVs are finalized first, and any export failure is
-recorded in the run log and skipped, never failing the build.
+the per-plot-season-week NDVI numbers in `baseline_plot_seasons.csv`. The baseline
+CSVs are finalized first, then export failures are recorded in the run log. When
+`NDVI_REQUIRE_EXPORTS=true` (default), missing or failed raw-imagery exports block
+a green run with a classified `imagery-export` error so the PM/client sees exactly
+why raw files were not produced.
 
 ## Run archive (traceability)
 
@@ -153,12 +157,12 @@ Every baseline / cycle / export run writes a dated local folder
 `data/ndvi/runs/<date>_<kind>/` containing the imagery, copies of the tables and
 a `run_log.json` (parameters, whitelisted config snapshot, per-plot statuses,
 skipped seasons, artifacts, errors — never credentials). With
-`NDVI_DRIVE_ARCHIVE=true` (or `--archive`) the folder is mirrored to
-`GOOGLE_DRIVE_FOLDER / E1.2_runs / <date>_<kind>` so any number in the Sheet can
+`NDVI_GCS_ARCHIVE=true` (or `--archive`) the folder is mirrored to
+`gs://GCS_BUCKET/GCS_ARCHIVE_PREFIX/<date>_<kind>/` so any number in the Sheet can
 be traced back to the exact inputs and settings that produced it. Re-archiving
-updates files in place (no duplicates). Note: a service account can only write
-into a **Shared Drive** folder (no personal Drive storage); the OAuth-user flow
-works for a normal "My Drive" folder.
+skips objects of unchanged size (no duplicates, unless `GCS_OVERWRITE=true`). The
+service account needs `roles/storage.objectAdmin` on the bucket, which lives in the
+same Cloud project as Earth Engine (so the EE credentials are reused).
 
 ## Known limitations / things to surface, not hide
 

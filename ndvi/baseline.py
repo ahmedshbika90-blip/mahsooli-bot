@@ -38,8 +38,8 @@ Usage:
                 exit before any Earth Engine call - no credentials needed.
     --plot ID   smoke-test mode: build only the given plot(s), writing
                 *.smoke.csv files that the current step never reads.
-    --archive   mirror the run folder to Google Drive even if
-                NDVI_DRIVE_ARCHIVE is false.
+    --archive   mirror the run folder to Google Cloud Storage even if
+                NDVI_GCS_ARCHIVE is false.
 
 Outputs: data/ndvi/baseline_plot_seasons.csv  (plot_id, sector, season, week, ...)
          data/ndvi/baseline_plots.csv         (plot_id, sector, week, ...)
@@ -65,20 +65,52 @@ from pipeline_utils import CsvPartWriter, PipelineError, run_main
 STEP = "baseline"
 
 
+def check_required_baseline_exports(failures, missing, run_dir):
+    """
+    Fail when required baseline raw imagery export broke.
+
+    Only genuine export errors fail the run; donor plot/seasons with no
+    cloud-free imagery are normal and reported as a warning, never an error.
+    """
+    if missing:
+        detail = "; ".join(missing[:8])
+        if len(missing) > 8:
+            detail += f"; ... {len(missing) - 8} more"
+        print(f"  WARN [{STEP}] no cloud-free imagery for some donor plot/seasons: {detail}")
+    if not config.NDVI_REQUIRE_EXPORTS:
+        return
+    if not failures:
+        return
+    detail = "; ".join(failures[:8])
+    if len(failures) > 8:
+        detail += f"; ... {len(failures) - 8} more"
+    raise PipelineError(
+        STEP,
+        "imagery-export",
+        f"required baseline raw imagery exports failed: {detail}",
+        f"the baseline CSVs are intact; inspect {run_dir / 'run_log.json'} and "
+        "fix the export/GCS issue, or set NDVI_REQUIRE_EXPORTS=false only if the "
+        "client accepts numeric-only baseline runs",
+        exit_code=9,
+    )
+
+
 def export_baseline_imagery(ee, plots, run_dir, run_log, run_date):
     """
     Supplementary: archive the raw Sentinel-2 / NDVI imagery BEHIND each sector
     baseline by exporting one artifact set per (donor plot, usable season) into
-    run_dir/imagery - so the Drive archive holds the imagery, not only the
+    run_dir/imagery - so the GCS archive holds the imagery, not only the
     numeric CSVs. The baseline CSVs are already finalized when this runs, so any
     export failure here is recorded and skipped: it never fails the run. Gated by
-    NDVI_BASELINE_EXPORT_IMAGERY; the imagery/ folder is mirrored to Drive by the
-    same archive_run_dir() that uploads the tables.
+    NDVI_BASELINE_EXPORT_IMAGERY; the imagery/ folder is mirrored to GCS by the
+    same archive_run_dir_to_gcs() that uploads the tables.
     """
     from exports import export_plot_imagery  # lazy: pulls EE-only export deps
 
     out_dir = run_dir / "imagery"
     n_files = failures = 0
+    failure_details = []
+    missing_details = []
     print()
     print("Baseline imagery (raw clipped S2 + NDVI per donor plot/season):")
     for p in plots:
@@ -90,6 +122,7 @@ def export_baseline_imagery(ee, plots, run_dir, run_log, run_date):
             try:
                 artifacts = export_plot_imagery(ee, p, start, end, out_dir)
                 if not artifacts:
+                    missing_details.append(f"{label}: no cloud-free imagery")
                     print(f"  {label:<16} no cloud-free imagery in window")
                     continue
                 for a in artifacts:
@@ -100,10 +133,12 @@ def export_baseline_imagery(ee, plots, run_dir, run_log, run_date):
                 print(f"  {label:<16} {len(artifacts)} file(s), {total_mb:.1f} MB")
             except Exception as e:  # noqa: BLE001 - supplementary; CSVs already final
                 failures += 1
+                failure_details.append(f"{label}: {e}")
                 run_log.error(f"baseline imagery failed for {label}: {e}")
                 run_log.plot_status(pid, imagery_error=str(e))
                 print(f"  WARN [{STEP}] imagery export failed for {label}: {e}")
     print(f"  Baseline imagery: {n_files} file(s), {failures} failure(s)")
+    return failure_details, missing_details
 
 
 def parse_args():
@@ -116,8 +151,8 @@ def parse_args():
                         help="Smoke-test only this plot id (repeatable); writes "
                              "*.smoke.csv files instead of the real baseline.")
     parser.add_argument("--archive", action="store_true",
-                        help="Mirror the run folder to Google Drive "
-                             "(also enabled by NDVI_DRIVE_ARCHIVE=true).")
+                        help="Mirror the run folder to Google Cloud Storage "
+                             "(also enabled by NDVI_GCS_ARCHIVE=true).")
     return parser.parse_args()
 
 
@@ -403,14 +438,15 @@ def main() -> int:
         if not problems:
             print(f"SKIP - baseline already exists and is complete: {out_sector}")
             print("       (use --refresh to rebuild)")
-            if config.NDVI_DRIVE_ARCHIVE or args.archive:
+            if config.NDVI_ARCHIVE_ENABLED or args.archive:
                 # Retry-the-upload-only path: archive the most recent baseline
                 # run folder without re-spending any Earth Engine quota.
                 existing = sorted(config.NDVI_RUNS_DIR.glob("*_baseline"))
                 if existing:
-                    from gdrive import archive_run_dir
+                    from gcs import archive_run_dir_to_gcs, mirror_ndvi_tiffs_to_gcs
 
-                    archive_run_dir(existing[-1], STEP)
+                    archive_run_dir_to_gcs(existing[-1], STEP)
+                    mirror_ndvi_tiffs_to_gcs(existing[-1], "baseline", STEP)
                 else:
                     print(f"WARN [{STEP}] no run folder under "
                           f"{config.NDVI_RUNS_DIR} to archive - use --refresh")
@@ -461,22 +497,31 @@ def main() -> int:
 
     print_summary(sector_rows, plots, out_ps)
 
-    # Dated run folder: table copies + run log; optionally mirrored to Drive.
+    # Dated run folder: table copies + run log; optionally mirrored to GCS.
     run_dir = run_dir_for(run_date, "baseline" if not args.plot else "baseline-smoke")
     run_dir.mkdir(parents=True, exist_ok=True)
     for path in (out_ps, out_plots, out_sector):
         shutil.copy2(path, run_dir / path.name)
 
+    export_failures = []
+    missing_exports = []
     if config.NDVI_BASELINE_EXPORT_IMAGERY:
-        export_baseline_imagery(ee, plots, run_dir, run_log, run_date)
+        export_failures, missing_exports = export_baseline_imagery(
+            ee, plots, run_dir, run_log, run_date
+        )
 
     log_path = run_log.write(run_dir)
     print(f"  Run log: {log_path}")
 
-    if config.NDVI_DRIVE_ARCHIVE or args.archive:
-        from gdrive import archive_run_dir  # repo root; lazy: needs Drive deps
+    # Archive first so a run that later trips the export acceptance gate still
+    # has its run folder + imagery mirrored to GCS for debugging.
+    if config.NDVI_ARCHIVE_ENABLED or args.archive:
+        from gcs import archive_run_dir_to_gcs, mirror_ndvi_tiffs_to_gcs  # lazy: needs GCS deps
 
-        archive_run_dir(run_dir, STEP)
+        archive_run_dir_to_gcs(run_dir, STEP)
+        mirror_ndvi_tiffs_to_gcs(run_dir, "baseline", STEP)
+
+    check_required_baseline_exports(export_failures, missing_exports, run_dir)
 
     return 0
 

@@ -8,7 +8,7 @@ plot's SECTOR baseline for the matching season-week, flags plots whose NDVI
 has dropped materially below normal, and writes the result to a local CSV and
 (optionally) the Mahsooli Google Sheet. When imagery export is enabled it also
 saves each plot's raw clipped Sentinel-2 / NDVI GeoTIFFs + RGB / NDVI PNGs for
-the window, and the whole dated run folder can be mirrored to Google Drive.
+the window, and the whole dated run folder can be mirrored to Google Cloud Storage.
 
 Alert rule (config.ndvi_is_alert): fire only when the NDVI is >20% below the
 sector baseline AND the baseline shows real vegetation (>= NDVI_VEG_FLOOR) AND
@@ -35,7 +35,7 @@ Output:
     data/ndvi/ndvi_log_<date>.csv          (always)
     data/ndvi/runs/<date>_cycle/           (imagery + CSV copy + run_log.json)
     Google Sheet NDVI_Log + Sector_Baseline tabs  (with --push / NDVI_SHEET_PUSH)
-    Drive mirror of the run folder         (with --archive / NDVI_DRIVE_ARCHIVE)
+    GCS mirror of the run folder           (with --archive / NDVI_GCS_ARCHIVE)
 """
 
 import argparse
@@ -74,6 +74,39 @@ FLAG_NO_COVERAGE = "No coverage"
 FLAG_OFF_SEASON = "Off-season"
 
 
+def check_required_exports(export_failures, missing_exports, run_dir):
+    """
+    Fail the run when raw imagery exports broke.
+
+    Only genuine export errors (exceptions while exporting) fail the run: this
+    gate exists so a green E1.2 run never hides a broken export pipeline. Plots
+    that simply had no cloud-free imagery in the window are normal in-season and
+    are reported as a warning, never an error (mirrors ndvi/exports.py).
+    The numeric CSV remains intact either way.
+    """
+    if missing_exports:
+        detail = "; ".join(missing_exports[:8])
+        if len(missing_exports) > 8:
+            detail += f"; ... {len(missing_exports) - 8} more"
+        print(f"  WARN [{STEP}] no cloud-free imagery for some plots: {detail}")
+    if not config.NDVI_REQUIRE_EXPORTS:
+        return
+    if not export_failures:
+        return
+    detail = "; ".join(export_failures[:8])
+    if len(export_failures) > 8:
+        detail += f"; ... {len(export_failures) - 8} more"
+    raise PipelineError(
+        STEP,
+        "imagery-export",
+        f"required raw imagery exports failed: {detail}",
+        f"the local NDVI CSV is intact; inspect {run_dir / 'run_log.json'} and "
+        "fix the export/GCS issue, or set NDVI_REQUIRE_EXPORTS=false only if the "
+        "client accepts numeric-only runs",
+        exit_code=9,
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute current NDVI + alerts.")
     parser.add_argument(
@@ -99,8 +132,8 @@ def parse_args():
     parser.add_argument(
         "--archive",
         action="store_true",
-        help="Mirror the run folder to Google Drive "
-             "(also enabled by NDVI_DRIVE_ARCHIVE=true).",
+        help="Mirror the run folder to Google Cloud Storage "
+             "(also enabled by NDVI_GCS_ARCHIVE=true).",
     )
     return parser.parse_args()
 
@@ -418,6 +451,8 @@ def main() -> int:
     # above is already safe and must not be lost to an imagery hiccup.
     export_enabled = (config.NDVI_EXPORT_ENABLED and not args.no_export
                       and not skip_compute and week is not None)
+    export_failures = []
+    missing_exports = []
     if export_enabled:
         import exports
 
@@ -429,11 +464,16 @@ def main() -> int:
                 artifacts = exports.export_plot_imagery(
                     ee, p, window_start, run_date, run_dir / "imagery"
                 )
+                if not artifacts:
+                    missing_exports.append(
+                        f"{pid}: no cloud-free imagery in this window"
+                    )
                 for a in artifacts:
                     run_log.artifact(a["file"], a["kind"], plot_id=pid)
                 run_log.plot_status(pid, imagery=[a["kind"] for a in artifacts])
                 print(f"  {pid:<12} {len(artifacts)} file(s)")
             except Exception as e:  # noqa: BLE001 - record + continue
+                export_failures.append(f"{pid}: {e}")
                 run_log.error(f"imagery export failed for {pid}: {e}")
                 run_log.plot_status(pid, imagery_error=str(e))
                 print(f"  WARN [{STEP}] imagery export failed for {pid}: {e}")
@@ -441,7 +481,7 @@ def main() -> int:
     # Dated run folder. A fresh run copies the CSV and writes the full run log.
     # A skip re-run (e.g. retrying a failed push or archive) must not clobber
     # the original run log, so it records itself as run_log_rerun.json - and
-    # the Drive archive runs EITHER way, so the documented "re-run with
+    # the GCS archive runs EITHER way, so the documented "re-run with
     # --archive to retry the upload only" actually works without --force.
     run_dir.mkdir(parents=True, exist_ok=True)
     if not skip_compute or not (run_dir / out_path.name).exists():
@@ -450,10 +490,15 @@ def main() -> int:
     log_path = run_log.write(run_dir, name=log_name)
     print(f"Run log: {log_path}")
 
-    if config.NDVI_DRIVE_ARCHIVE or args.archive:
-        from gdrive import archive_run_dir  # repo root; deps needed only on use
+    # Archive first so a run that later trips an acceptance gate (export/push)
+    # still has its run folder + imagery mirrored to GCS for debugging.
+    if config.NDVI_ARCHIVE_ENABLED or args.archive:
+        from gcs import archive_run_dir_to_gcs, mirror_ndvi_tiffs_to_gcs  # deps needed only on use
 
-        archive_run_dir(run_dir, STEP)
+        archive_run_dir_to_gcs(run_dir, STEP)
+        mirror_ndvi_tiffs_to_gcs(run_dir, "current", STEP)
+
+    check_required_exports(export_failures, missing_exports, run_dir)
 
     if push_failure is not None:
         raise PipelineError(

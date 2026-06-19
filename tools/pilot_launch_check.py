@@ -20,6 +20,7 @@ Outputs (in data/pilot_check/):
 
 Usage:
     python tools/pilot_launch_check.py
+    python tools/pilot_launch_check.py --farmers-csv path/to/registry.csv
     python tools/pilot_launch_check.py --farmers-csv path/to/registry.csv --limit 10
     python tools/pilot_launch_check.py --lookup-csv path/to/lookup.csv
 
@@ -117,10 +118,20 @@ def load_lookup(lookup_csv):
 
 
 def load_first_farmers(farmers_csv, limit):
-    """First `limit` registered farmers via the shared config.load_farmers loader."""
+    """Registered farmers via the shared loader; all rows unless a limit is given."""
     farmers = config.load_farmers(farmers_csv)
     if not farmers:
         raise ValueError(f"No valid farmers found in: {farmers_csv}")
+    if limit is None:
+        return farmers
+    if limit < 1:
+        raise ValueError("--limit must be a positive integer when provided")
+    if len(farmers) < limit:
+        raise ValueError(
+            f"{farmers_csv} contains {len(farmers)} valid farmer rows, fewer than "
+            f"requested limit {limit}. Use no --limit to check all available rows, "
+            "or provide the complete registered farmer file."
+        )
     return farmers[:limit]
 
 
@@ -226,8 +237,8 @@ def signoff_status_and_statement(rows):
 
     status = "Ready - all farmers scored"
     statement = (
-        f"I confirm that the V5 rainfall scores calculate correctly for the first "
-        f"{scored} registered farmers."
+        f"I confirm that the V5 rainfall scores calculate correctly for all "
+        f"{scored} registered farmers in the supplied file."
     )
     return status, statement, scored, escalated, mismatched, escalated_ids
 
@@ -403,8 +414,8 @@ def parse_args():
     parser.add_argument(
         "--limit",
         type=int,
-        default=10,
-        help="Number of first farmers to check. Default: 10",
+        default=None,
+        help="Optional number of first farmers to check. Default: check all rows.",
     )
     return parser.parse_args()
 
@@ -434,7 +445,7 @@ def main():
     print(f"Farmers CSV: {farmers_csv}")
     print(f"Lookup CSV:  {lookup_csv}")
     print(f"Output dir:  {OUTPUT_DIR}")
-    print(f"Limit:       {args.limit}")
+    print(f"Limit:       {args.limit if args.limit is not None else 'ALL'}")
     print(f"Cell size:   {config.CELL_SIZE} deg")
     print("=" * 90)
 
@@ -449,6 +460,15 @@ def main():
     write_csv(rows, out_csv)
     write_xlsx(rows, table, status, statement, out_xlsx)
     write_signoff_txt(statement, status, escalated_ids, out_txt)
+
+    # Archive the sign-off package to GCS, classified by date:
+    # gs://GCS_BUCKET/<date>/e1.3-pilot/. Off by default; runs for blocked
+    # sign-offs too so every check is traceable. Local files above are intact.
+    if config.GCS_ARCHIVE:
+        from gcs import upload_files_to_gcs, date_first_dest
+
+        dest = date_first_dest(TODAY, "e1.3-pilot")
+        upload_files_to_gcs([out_csv, out_xlsx, out_txt], dest, "E1.3")
 
     for row in rows:
         shown = row["expected_v5_score"] if row["expected_v5_score"] != "" else "-"

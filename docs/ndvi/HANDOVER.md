@@ -24,10 +24,12 @@ Configure in GitHub → **Settings → Secrets and variables → Actions**:
       accounts have 0 GB Drive storage, so the Sheet must be human-created and shared).
 - [ ] The baseline-donor plot registry `data/farmers/baseline_plots.csv` is populated
       (tracked in git, phone numbers stripped) and `python ndvi/registry.py` runs clean.
-- [ ] *(optional, for the Drive run archive)* **Secret** `GOOGLE_DRIVE_SERVICE_ACCOUNT_INFO`,
-      **Variables** `GOOGLE_DRIVE_FOLDER` (a **Shared Drive** folder — service accounts
-      cannot write to a plain "My Drive") and `NDVI_DRIVE_ARCHIVE=true`; verified once with
-      a small test upload before relying on it.
+- [ ] The financed-farmer registry named by `NDVI_FARMERS_CSV` is populated
+      (`data/farmers/farmers.csv` by default) and `NDVI_MONITOR_FARMERS=true`.
+- [ ] *(optional, for the GCS run archive)* **Variables** `GCS_BUCKET` (a bucket in
+      `EE_PROJECT_ID`) and `NDVI_GCS_ARCHIVE=true`; the EE service account is granted
+      `roles/storage.objectAdmin` on that bucket (a separate `GCS_SERVICE_ACCOUNT_INFO`
+      secret is optional). Verified once with a small test upload before relying on it.
 - [ ] `.github/workflows/e1.2-ndvi-monitor.yml` is pushed to the default branch.
 - [ ] One end-to-end CI run has completed green (Actions → "E1.2 - NDVI Crop-Health Monitor").
 
@@ -43,7 +45,10 @@ Configure in GitHub → **Settings → Secrets and variables → Actions**:
 - [ ] Showed the Google Sheet `NDVI_Log` tab (seven columns) and the `Sector_Baseline`
       tab (the rainfed / irrigated "normal" curves; irrigated is advisory — one donor plot).
 - [ ] Showed where a run's imagery + run log live (GitHub run artifact "ndvi-run";
-      Google Drive `E1.2_runs/<date>_cycle` when archiving is enabled).
+      `gs://<GCS_BUCKET>/E1.2_runs/<date>_cycle` when archiving is enabled).
+- [ ] Pointed at the dedicated NDVI-raster folders for quick access:
+      `gs://<GCS_BUCKET>/ndvi/baseline/<date>/` (baseline NDVI) and
+      `gs://<GCS_BUCKET>/ndvi/current/<date>/` (each cycle's NDVI).
 - [ ] Explained the in-season auto-schedule (1st / 11th / 21st, June–March; Apr–May
       reports Off-season).
 - [ ] Call date: _______________   Recording / notes link: _______________
@@ -113,8 +118,9 @@ GitHub Actions run can be diagnosed from a single log line:
 | 4 | `ee-auth` | Earth Engine credentials / project / IAM problem — retrying won't help |
 | 5 | `ee-transient` | Earth Engine quota/backend failure that persisted through `EE_RETRIES` retries |
 | 6 | `baseline-incomplete` / `baseline-corrupt` / `output-incomplete` | the baseline is truncated, stale, or EE returned short results — rebuild with `--refresh` |
-| 7 | `drive-upload` | the Google Drive run archive failed — **local artifacts are intact**; re-run with `--archive` to retry the upload only |
+| 7 | `gcs-upload` / `gcs-config` | the Google Cloud Storage run archive failed — **local artifacts are intact**; re-run with `--archive` to retry the upload only |
 | 8 | `sheet-push` | the Google Sheet push failed — **local CSV and run log are intact**; fix the Sheets credentials/sharing and re-run with `--push` |
+| 9 | `imagery-export` | required raw Sentinel-2 / NDVI imagery was not produced for one or more plots; the message names the plot/window and the run log has details |
 | 1 | `unexpected` | anything else (a one-line ERROR precedes the traceback) |
 
 Bad farmer rows are skipped with `WARN [farmers] invalid-row: ...` lines; transient EE
