@@ -114,7 +114,7 @@ function getQuestion(step, data = {}) {
 اليوم / الشهر / السنة
 مثال: ١٥/٠٦/١٩٨٥`
 
-    case 3: return `${h}الجنس
+    case 3: return `${h}الجنس 
 
 ١ — ذكر
 ٢ — أنثى`
@@ -128,7 +128,11 @@ function getQuestion(step, data = {}) {
 
 اكتب  لا يوجد  إذا لم يكن لديك`
 
-   case 6: return isYes(t) ? 8 : 9
+  case 6: return `${h}هل لديك بطاقة إثبات شخصية؟
+(رقم وطني / جواز سفر / بطاقة قومية)
+
+١ — نعم
+٢ — لا`
 
   
 
@@ -534,11 +538,11 @@ function getYieldSteps(cropsAnswer) {
 
 // ─── Skip logic ───────────────────────────────────────────────────────────────
 function getNextStep(step, answer, data) {
-  if (!answer) return step + 1  // ← add this guard
   const t = answer.trim()
 
   switch(step) {
-    case 6: return isYes(t) ? 8 : 9     // has ID → number, else → state                     // ID number → photo
+    case 6:  return isYes(t) ? 7 : 9        // has ID → number, else → state
+    case 7:  return 8                        // ID number → photo
     case 8:  return 9                        // photo → state
     case 15: return isYes(t) ? 16 : 19      // has bank → which banks, else → union
     case 16: return t.includes('8') ? 18 : 17   // other bank → step 18
@@ -564,6 +568,7 @@ function getNextStep(step, answer, data) {
       const idx = yieldSteps.indexOf(step)
       return idx < yieldSteps.length - 1 ? yieldSteps[idx + 1] : 36
     }
+    case 36: return t === '1' ? 38 : 45     // bank → amount, else → preferred crops
     case 37: return 45                       // other finance → preferred crops
     case 36: return t === '1' ? 38 : t === '5' ? 37 : 45
     case 39: return isYes(t) ? 42 : 40      // repaid → use, not repaid → why
@@ -742,29 +747,26 @@ async function handleMessage(phone, text, message = {}) {
   }
 
   // ── Not started — wait for ١ ─────────────────────────────────────────────────
-if (!session.started) {
-  const normalized = text
-    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-    .trim()
-  if (normalized === '1') {
-    session.started = true
-    session.step = 1
-    session.last_activity = Date.now()
-    await Promise.all([
-      saveSession(phone, session),
-      sendWhatsApp(phone, getQuestion(1, session.data))
-    ])
-  } else {
-    await sendWhatsApp(phone, 'اكتب  *١*  للبدء في التسجيل')
+  if (!session.started) {
+    const normalized = text.replace(/[١٢٣٤٥٦٧٨٩٠]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    if (normalized === '1') {
+      session.started = true
+      session.step = 1
+      session.last_activity = Date.now()
+      await Promise.all([
+        saveSession(phone, session),
+        sendWhatsApp(phone, getQuestion(1, session.data))
+      ])
+    } else {
+      await sendWhatsApp(phone, 'اكتب  *١*  للبدء في التسجيل')
+    }
+    return
   }
-  return
-}
+
   // ── Awaiting resume after reminder ──────────────────────────────────────────
- if (session.awaiting_resume) {
-  const normalized = text
-    .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-    .trim()
-  if (normalized === '2') {
+  if (session.awaiting_resume) {
+    const normalized = text.replace(/[١٢٣٤٥٦٧٨٩٠]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    if (normalized === '2') {
       session.awaiting_resume = false
       session.last_activity = Date.now()
       await Promise.all([
