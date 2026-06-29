@@ -1,0 +1,26 @@
+[project]
+name = "mahala-chirps-pipeline"
+version = "1.0.0"
+description = "CHIRPS v2.0 rainfall score lookup-table pipeline for the Mahala AOI (Gedaref, Sudan)"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy==2.4.6",
+    "rasterio==1.5.0",
+    # tools/google_sheets_lookup.py builds the .xlsx workbook.
+    "openpyxl==3.1.5",
+]
+
+# Optional: only needed for `python tools/google_sheets_lookup.py --upload-google-drive`,
+# which publishes the workbook as a live Google Sheet. Install with:
+#     pip install "mahala-chirps-pipeline[gdrive]"   (or pip install the three libs)
+[project.optional-dependencies]
+gdrive = [
+    "google-api-python-client==2.149.0",
+    "google-auth==2.36.0",
+    "google-auth-oauthlib==1.2.1",
+]
+
+# Scripts-only project (run-as-scripts pipeline), not an installable package.
+[tool.uv]
+package = false

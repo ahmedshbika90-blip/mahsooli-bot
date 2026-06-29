@@ -1,0 +1,7 @@
+﻿Mahsooli ID,Latitude,Longitude,Grid key,Expected V5 score,Calculated V5 score,Check,Reviewer note
+F001,13.47,35.98,13.475_35.975,10,10,OK,In-AOI; grid cell exact-matched to the CHIRPS lookup; stored score = score recomputed from avg rainfall.
+F002,13.462,36.031,13.475_36.025,10,10,OK,In-AOI; grid cell exact-matched to the CHIRPS lookup; stored score = score recomputed from avg rainfall.
+F003,13.431,35.829,13.425_35.825,10,10,OK,In-AOI; grid cell exact-matched to the CHIRPS lookup; stored score = score recomputed from avg rainfall.
+F004,13.444,35.884,13.425_35.875,10,10,OK,In-AOI; grid cell exact-matched to the CHIRPS lookup; stored score = score recomputed from avg rainfall.
+F005,13.418,35.933,13.425_35.925,10,10,OK,In-AOI; grid cell exact-matched to the CHIRPS lookup; stored score = score recomputed from avg rainfall.
+F006,13.0,35.0,,,,ESCALATE,Outside coverage area - no rainfall score (escalate for manual review)
