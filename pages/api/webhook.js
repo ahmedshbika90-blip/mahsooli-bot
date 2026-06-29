@@ -1,3 +1,4 @@
+import { uploadIdPhoto } from '../../lib/storage'
 import { validateAnswer, getLocalities, getVarieties } from '../../utils/validate'
 import { sendWhatsApp } from '../../lib/whatsapp'
 import { saveToSheets } from '../../lib/sheets'
@@ -812,22 +813,24 @@ async function handleMessage(phone, text, message = {}) {
     return
   }
 
-  // Valid ID — save image ID and extracted number
-  session.data.q8  = mediaId
-  session.data.q7  = result.id_number || session.data.q7 || ''
-  session.last_activity = Date.now()
-  session.step = 9
+ // Valid ID — upload to Firebase Storage
+const photoUrl = await uploadIdPhoto(media.base64, media.mimeType, phone)
 
-  const confirmMsg = result.id_number
-    ? `✅ تم التحقق من الهوية بنجاح.\nرقم الهوية: ${result.id_number}`
-    : `✅ تم التحقق من الهوية بنجاح.`
+session.data.q8  = photoUrl || mediaId   // URL if uploaded, fallback to mediaId
+session.data.q7  = result.id_number || session.data.q7 || ''
+session.last_activity = Date.now()
+session.step = 9
 
-  await sendWhatsApp(phone, confirmMsg)
-  await Promise.all([
-    saveSession(phone, session),
-    sendWhatsApp(phone, getQuestion(9, session.data))
-  ])
-  return
+const confirmMsg = result.id_number
+  ? `✅ تم التحقق من الهوية بنجاح.\nرقم الهوية: ${result.id_number}`
+  : `✅ تم التحقق من الهوية بنجاح.`
+
+await sendWhatsApp(phone, confirmMsg)
+await Promise.all([
+  saveSession(phone, session),
+  sendWhatsApp(phone, getQuestion(9, session.data))
+])
+return
 }
   // ── Normalize Arabic numerals for all inputs ─────────────────────────────────
   const normalizedText = text
