@@ -781,15 +781,16 @@ async function handleMessage(phone, text, message = {}) {
     return
   }
 
-  // ── ID photo step ────────────────────────────────────────────────────────────
- if (session.step === 8) {
+if (session.step === 8) {
   if (text !== '__IMAGE__') {
     await sendWhatsApp(phone, 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.')
     return
   }
 
-  const mediaId = message.image?.id
-  if (!mediaId) {
+  const mediaId  = message.image?.id
+  const mediaUrl = message.image?.url
+
+  if (!mediaId || !mediaUrl) {
     await sendWhatsApp(phone, 'لم نتمكن من استلام الصورة. يرجى المحاولة مرة أخرى.')
     return
   }
@@ -797,8 +798,8 @@ async function handleMessage(phone, text, message = {}) {
   // Let user know we're processing
   await sendWhatsApp(phone, 'جارٍ التحقق من الصورة...')
 
-  // Download image from 360dialog
-  const media = await downloadMedia(mediaId)
+  // Download image
+  const media = await downloadMedia(mediaId, mediaUrl)
   if (!media) {
     await sendWhatsApp(phone, 'تعذر تحميل الصورة. يرجى إرسالها مرة أخرى.')
     return
