@@ -716,10 +716,11 @@ export default async function handler(req, res) {
     if (isAlreadyProcessed(message.id)) continue
 
     // Handle image messages for ID photo step
-    if (message.type === 'image') {
-      await handleMessage(phone, '__IMAGE__', message)
-      continue
-    }
+ if (message.type === 'image') {
+  console.log('Full image object:', JSON.stringify(message.image))
+  await handleMessage(phone, '__IMAGE__', message)
+  continue
+}
 
     if (message.type !== 'text') {
       await sendWhatsApp(phone, 'يرجى الرد برسالة نصية فقط.')
