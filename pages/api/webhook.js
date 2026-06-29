@@ -6,7 +6,8 @@ import { getSession, saveSession } from '../../lib/firebase'
 import { saveToFirestore } from '../../lib/firestore'
 import { isAlreadyProcessed } from '../../utils/session'
 import { verifyNationalId } from '../../lib/claude'
-import { downloadMedia }    from '../../lib/media'
+import { downloadMedia } from '../../lib/media'
+
 const TOTAL_STEPS = 68
 
 // ─── Lookup tables ────────────────────────────────────────────────────────────
@@ -37,9 +38,7 @@ const INCOME_SRC  = {
   '4':'خدمات نقل وترحيل','5':'المعاش','6':'حرف يدوية',
   '7':'إيجار الأراضي أو المعدات','8':'رعي','9':'حوالات','10':'دعم نقدي من منظمات'
 }
-// Crop step mapping for yield questions
 const CROP_YIELD_STEP = {'1':29,'2':30,'3':31,'4':32,'5':33,'6':34,'7':35}
-const YIELD_STEP_CROP = {29:'1',30:'2',31:'3',32:'4',33:'5',34:'6',35:'7'}
 const YIELD_CROP_NAME = {29:'السمسم',30:'الذرة الرفيعة',31:'الفول السوداني',32:'القطن',33:'حب البطيخ',34:'الدخن',35:'عباد الشمس'}
 const YIELD_UNIT      = {29:'شوال',30:'شوال',31:'شوال',32:'قنطار',33:'شوال',34:'شوال',35:'شوال'}
 
@@ -47,25 +46,23 @@ function lookup(map, val) {
   return val.split(/[,،\s]+/).map(v => map[v.trim()] || v).join('، ')
 }
 function isYes(val) { return val === '1' }
-function isNo(val)  { return val === '2' }
 
 // ─── Progress header ──────────────────────────────────────────────────────────
 function header(step) {
   const sections = [
-    { label: 'البيانات الشخصية',      steps: [1,2,3,4,5,6,7,8] },
+    { label: 'البيانات الشخصية',      steps: [1,2,3,4,5,6,8] },
     { label: 'بيانات السكن والتواصل', steps: [9,10,11,12,13,14,15,16,17,18] },
     { label: 'الزراعة والتمويل',      steps: [19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44] },
     { label: 'المحاصيل وطلب التمويل', steps: [45,46,47,48,49,50,51,52,53,54,55,56,57] },
-    { label: 'بيانات الأسرة',          steps: [58,59,60,61,62,63,64,65,66,67,68] },
+    { label: 'بيانات الأسرة',         steps: [58,59,60,61,62,63,64,65,66,67,68] },
   ]
-
   const ar = n => n.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d])
   const current = sections.findIndex(s => s.steps.includes(step))
   const sectionNum = current + 1
   const label = sections[current]?.label || ''
-
   return `القسم ${ar(sectionNum)} من ${ar(sections.length)}  •  ${label}\n\n`
 }
+
 // ─── Welcome message ──────────────────────────────────────────────────────────
 const WELCOME = `*برنامج التمويل الزراعي*
 البنك الزراعي السوداني بالشراكة مع محصولي
@@ -86,8 +83,8 @@ const WELCOME = `*برنامج التمويل الزراعي*
   مثال: ١,٣,٤
 
 · للمبالغ المالية الكبيرة، استخدم الفاصلة
-  مثال: ١,٥٠٠,٠٠٠ وليس ١٥٠٠٠٠٠  
-  
+  مثال: ١,٥٠٠,٠٠٠ وليس ١٥٠٠٠٠٠
+
 · للأسئلة الاختيارية اكتب  لا يوجد
 
 · جميع بياناتك محفوظة بسرية تامة ولن تُشارك مع أي جهة خارج البرنامج.
@@ -115,7 +112,7 @@ function getQuestion(step, data = {}) {
 اليوم / الشهر / السنة
 مثال: ١٥/٠٦/١٩٨٥`
 
-    case 3: return `${h}الجنس 
+    case 3: return `${h}الجنس
 
 ١ — ذكر
 ٢ — أنثى`
@@ -129,14 +126,14 @@ function getQuestion(step, data = {}) {
 
 اكتب  لا يوجد  إذا لم يكن لديك`
 
-  case 6: return `${h}هل لديك بطاقة إثبات شخصية؟
+    case 6: return `${h}هل لديك بطاقة إثبات شخصية؟
 (رقم وطني / جواز سفر / بطاقة قومية)
 
 ١ — نعم
 ٢ — لا`
 
-  
-
+    // Q7 is skipped — ID number extracted by Claude from photo
+    // Q8 is handled separately as image step
     case 8: return `${h}أرسل صورة واضحة لبطاقة إثبات الشخصية
 
 التقط صورة للبطاقة وأرسلها`
@@ -220,10 +217,10 @@ function getQuestion(step, data = {}) {
 
 أكثر من اختيار: مثال  ١,٣`
 
-   case 18: {
-  const fromBank = (data.q16 || '').includes('8') && !data.q17
-  return `${h}${fromBank ? 'اذكر اسم البنك' : 'اذكر اسم التطبيق البنكي'}`
-}
+    case 18: {
+      const fromBank = (data.q16 || '').includes('8') && !data.q17
+      return `${h}${fromBank ? 'اذكر اسم البنك' : 'اذكر اسم التطبيق البنكي'}`
+    }
 
     case 19: return `${h}*القسم الثالث — الزراعة والتمويل*
 ────────────────────────
@@ -359,10 +356,10 @@ function getQuestion(step, data = {}) {
 
     case 44: return `${h}اذكر اسم البنك`
 
-case 45: {
-  const selectedCrops = (data.q28 || '').split(/[,،\s]+/).filter(Boolean)
-  const isSingle = selectedCrops.length === 1
-  return `${h}*المحاصيل وطلب التمويل*
+    case 45: {
+      const selectedCrops = (data.q28 || '').split(/[,،\s]+/).filter(Boolean)
+      const isSingle = selectedCrops.length === 1
+      return `${h}*المحاصيل وطلب التمويل*
 ────────────────────────
 
 ${isSingle ? 'المحصول الذي تريد زراعته هذا الموسم' : 'المحاصيل التي تريد زراعتها هذا الموسم'}
@@ -376,12 +373,12 @@ ${isSingle ? 'المحصول الذي تريد زراعته هذا الموسم'
 ٧ — عباد الشمس
 
 ${isSingle ? '' : 'أكثر من اختيار: مثال  ١,٣'}`
-}
+    }
 
-   case 46: {
-  const count = (data.q45 || '').split(/[,،\s]+/).filter(Boolean).length
-  const word = count === 1 ? 'هذا المحصول' : 'هذه المحاصيل'
-  return `${h}لماذا اخترت ${word}؟  (اختياري)
+    case 46: {
+      const count = (data.q45 || '').split(/[,،\s]+/).filter(Boolean).length
+      const word = count === 1 ? 'هذا المحصول' : 'هذه المحاصيل'
+      return `${h}لماذا اخترت ${word}؟  (اختياري)
 
 ١ — سعر أفضل في السوق
 ٢ — طلب محلي مرتفع
@@ -395,7 +392,7 @@ ${isSingle ? '' : 'أكثر من اختيار: مثال  ١,٣'}`
 
 أكثر من اختيار: مثال  ١,٤
 أو اكتب: لا يوجد`
-}
+    }
 
     case 47: return `${h}وضّح السبب`
 
@@ -539,22 +536,22 @@ function getYieldSteps(cropsAnswer) {
 
 // ─── Skip logic ───────────────────────────────────────────────────────────────
 function getNextStep(step, answer, data) {
+  if (!answer) return step + 1
   const t = answer.trim()
 
   switch(step) {
-    case 6:  return isYes(t) ? 7 : 9        // has ID → number, else → state
-    case 7:  return 8                        // ID number → photo
-    case 8:  return 9                        // photo → state
+    case 6:  return isYes(t) ? 8 : 9        // has ID → photo directly, else → state
+    case 8:  return 9                        // photo → state (handled separately)
     case 15: return isYes(t) ? 16 : 19      // has bank → which banks, else → union
-    case 16: return t.includes('8') ? 18 : 17   // other bank → step 18
-    case 17: return t.includes('8') ? 18 : 19   // other app → step 18
-    case 18: return 19                           // either other → union
+    case 16: return t.includes('8') ? 18 : 17   // other bank → name
+    case 17: return t.includes('8') ? 18 : 19   // other app → name
+    case 18: return 19                           // other name → union
     case 19: return isYes(t) ? 20 : 21      // union → name, else → farm
     case 22: return t === '2' ? 23 : 24     // rented → tenure, owned → docs
     case 23: return 25                       // tenure → guarantees
     case 25: return isYes(t) ? 26 : 28      // has guarantees → type, else → crops
-    case 26: return t.includes('4') ? 27 : 28  // other → specify, else → crops
-    case 28: {                               // crops → first yield step
+    case 26: return t.includes('4') ? 27 : 28   // other → specify, else → crops
+    case 28: {
       const yieldSteps = getYieldSteps(t)
       return yieldSteps.length > 0 ? yieldSteps[0] : 36
     }
@@ -564,45 +561,46 @@ function getNextStep(step, answer, data) {
     case 32:
     case 33:
     case 34:
-    case 35: {                               // yield → next yield or finance
+    case 35: {
       const yieldSteps = getYieldSteps(data.q28 || '')
       const idx = yieldSteps.indexOf(step)
       return idx < yieldSteps.length - 1 ? yieldSteps[idx + 1] : 36
     }
-    case 36: return t === '1' ? 38 : 45     // bank → amount, else → preferred crops
+    case 36: return t === '1' ? 38 : t === '5' ? 37 : 45   // bank → amount, other → specify, else → crops
     case 37: return 45                       // other finance → preferred crops
-    case 36: return t === '1' ? 38 : t === '5' ? 37 : 45
-    case 39: return isYes(t) ? 42 : 40      // repaid → use, not repaid → why
-    case 40: return t === '4' ? 41 : 42     // other reason → specify, else → use
+    case 38: return 39                       // amount → repaid?
+    case 39: return isYes(t) ? 42 : 40      // repaid → use, not → why
+    case 40: return t === '4' ? 41 : 42     // other reason → specify
     case 41: return 42
-    case 43: return t === '8' ? 44 : 45     // other bank → name, else → preferred
+    case 42: return 43                       // use → which bank
+    case 43: return t === '8' ? 44 : 45     // other bank → name
     case 44: return 45
     case 46: return t.includes('9') ? 47 : 48   // other reason → specify
     case 47: return 48
-    case 49: {                               // variety → other if last choice
+    case 49: {
       const varieties = getVarieties(data.q48 || '')
       const lastChoice = String(varieties.length)
       return (t === lastChoice && varieties[varieties.length-1] === 'أخرى') ? 50 : 51
     }
     case 50: return 51
     case 51: return isYes(t) ? 54 : 52      // fertilizer yes → pesticides, no → why
-    case 52: return t.includes('5') ? 53 : 54   // other → specify
+    case 52: return t.includes('5') ? 53 : 54
     case 53: return 54
     case 54: return isYes(t) ? 57 : 55      // pesticides yes → amount, no → why
-    case 55: return t.includes('5') ? 56 : 57   // other → specify
+    case 55: return t.includes('5') ? 56 : 57
     case 56: return 57
     case 58: {
-     if (t === '2') return 59   // married → wives
-     if (t === '1') return 63   // single → skip to dependents
-      return 60                   // widowed/divorced → children
-                  }
-    case 59: return 60              
-    case 60: return isYes(t) ? 61 : 63      // has children → count, else → dependents
+      if (t === '2') return 59              // married → wives
+      if (t === '1') return 63             // single → dependents
+      return 60                             // widowed/divorced → children
+    }
+    case 59: return 60
+    case 60: return isYes(t) ? 61 : 63
     case 61: return 62
-    case 63: return isYes(t) ? 64 : 65      // dependents → count
+    case 63: return isYes(t) ? 64 : 65
     case 64: return 65
-    case 65: return isYes(t) ? 66 : 68      // other income → sources, else → consent
-    case 66: return t.includes('9') ? 67 : 68   // remittances → amount
+    case 65: return isYes(t) ? 66 : 68
+    case 66: return t.includes('9') ? 67 : 68
     case 67: return 68
     default: return step + 1
   }
@@ -617,81 +615,81 @@ function buildRow(phone, d) {
 
   return {
     phone,
-    first_name:         nameParts[0] || 'لا ينطبق',
-    second_name:        nameParts[1] || 'لا ينطبق',
-    third_name:         nameParts[2] || 'لا ينطبق',
-    fourth_name:        nameParts[3] || 'لا ينطبق',
-    dob:                v('q2'),
-    gender:             d.q3==='1' ? 'ذكر' : d.q3==='2' ? 'أنثى' : 'لا ينطبق',
-    phone_primary:      v('q4'),
-    phone_secondary:    v('q5'),
-    has_id:             d.q6 ? (isYes(d.q6) ? 'نعم' : 'لا') : 'لا ينطبق',
-    id_number:          v('q7'),
-    id_photo:           v('q8'),
-    state:              STATES[d.q9] || 'لا ينطبق',
-    locality:           localityName,
-    education:          EDUCATION[d.q11] || 'لا ينطبق',
-    has_smartphone:     d.q12 ? (isYes(d.q12) ? 'نعم' : 'لا') : 'لا ينطبق',
-    network_coverage:   d.q13 ? (isYes(d.q13) ? 'نعم' : 'لا') : 'لا ينطبق',
-    best_network:       NETWORKS[d.q14] || 'لا ينطبق',
-    has_bank:           d.q15 ? (isYes(d.q15) ? 'نعم' : 'لا') : 'لا ينطبق',
-    banks:              d.q16 ? lookup(BANKS, d.q16) : 'لا ينطبق',
-    banking_apps:       d.q17 ? lookup(BANK_APPS, d.q17) : 'لا ينطبق',
-    other_bank:         v('q18'),
-    union_member:       d.q19 ? (isYes(d.q19) ? 'نعم' : 'لا') : 'لا ينطبق',
-    union_name:         v('q20'),
-    farm_size:          v('q21'),
-    land_ownership:     d.q22==='1' ? 'مملوكة' : d.q22==='2' ? 'مستأجرة' : 'لا ينطبق',
-    rent_tenure:        RENT_TENURE[d.q23] || 'لا ينطبق',
-    ownership_docs:     d.q24 ? (isYes(d.q24) ? 'نعم' : 'لا') : 'لا ينطبق',
-    has_guarantees:     d.q25 ? (isYes(d.q25) ? 'نعم' : 'لا') : 'لا ينطبق',
-    guarantee_types:    d.q26 ? lookup(GUARANTEES, d.q26) : 'لا ينطبق',
-    other_guarantee:    v('q27'),
-    crops_last3:        d.q28 ? lookup(CROPS, d.q28) : 'لا ينطبق',
-    yield_sesame:       v('q29'),
-    yield_sorghum:      v('q30'),
-    yield_groundnut:    v('q31'),
-    yield_cotton:       v('q32'),
-    yield_watermelon:   v('q33'),
-    yield_millet:       v('q34'),
-    yield_sunflower:    v('q35'),
-    finance_source:     FINANCE_HOW[d.q36] || 'لا ينطبق',
-    other_finance:      v('q37'),
-    finance_amount:     d.q38 ? d.q38.replace(/,|،/g, '') : 'لا ينطبق',
-    repaid:             d.q39 ? (isYes(d.q39) ? 'نعم' : 'لا') : 'لا ينطبق',
-    no_repay_reason:    NO_REPAY[d.q40] || 'لا ينطبق',
-    other_repay_reason: v('q41'),
-    finance_use:        d.q42 ? lookup(FINANCE_USE, d.q42) : 'لا ينطبق',
-    finance_bank:       BANKS[d.q43] || 'لا ينطبق',
-    other_finance_bank: v('q44'),
-    preferred_crops:    d.q45 ? lookup(CROPS, d.q45) : 'لا ينطبق',
-    crop_reason:        d.q46 ? lookup(CROP_REASON, d.q46) : 'لا ينطبق',
-    other_crop_reason:  v('q47'),
-    finance_crop:       CROPS[d.q48] || 'لا ينطبق',
-    seed_variety:       (() => {
+    first_name:           nameParts[0] || 'لا ينطبق',
+    second_name:          nameParts[1] || 'لا ينطبق',
+    third_name:           nameParts[2] || 'لا ينطبق',
+    fourth_name:          nameParts[3] || 'لا ينطبق',
+    dob:                  v('q2'),
+    gender:               d.q3==='1' ? 'ذكر' : d.q3==='2' ? 'أنثى' : 'لا ينطبق',
+    phone_primary:        v('q4'),
+    phone_secondary:      v('q5'),
+    has_id:               d.q6 ? (isYes(d.q6) ? 'نعم' : 'لا') : 'لا ينطبق',
+    id_number:            v('q7'),    // extracted by Claude
+    id_photo:             v('q8'),    // Firebase Storage URL
+    state:                STATES[d.q9] || 'لا ينطبق',
+    locality:             localityName,
+    education:            EDUCATION[d.q11] || 'لا ينطبق',
+    has_smartphone:       d.q12 ? (isYes(d.q12) ? 'نعم' : 'لا') : 'لا ينطبق',
+    network_coverage:     d.q13 ? (isYes(d.q13) ? 'نعم' : 'لا') : 'لا ينطبق',
+    best_network:         NETWORKS[d.q14] || 'لا ينطبق',
+    has_bank:             d.q15 ? (isYes(d.q15) ? 'نعم' : 'لا') : 'لا ينطبق',
+    banks:                d.q16 ? lookup(BANKS, d.q16) : 'لا ينطبق',
+    banking_apps:         d.q17 ? lookup(BANK_APPS, d.q17) : 'لا ينطبق',
+    other_bank:           v('q18'),
+    union_member:         d.q19 ? (isYes(d.q19) ? 'نعم' : 'لا') : 'لا ينطبق',
+    union_name:           v('q20'),
+    farm_size:            v('q21'),
+    land_ownership:       d.q22==='1' ? 'مملوكة' : d.q22==='2' ? 'مستأجرة' : 'لا ينطبق',
+    rent_tenure:          RENT_TENURE[d.q23] || 'لا ينطبق',
+    ownership_docs:       d.q24 ? (isYes(d.q24) ? 'نعم' : 'لا') : 'لا ينطبق',
+    has_guarantees:       d.q25 ? (isYes(d.q25) ? 'نعم' : 'لا') : 'لا ينطبق',
+    guarantee_types:      d.q26 ? lookup(GUARANTEES, d.q26) : 'لا ينطبق',
+    other_guarantee:      v('q27'),
+    crops_last3:          d.q28 ? lookup(CROPS, d.q28) : 'لا ينطبق',
+    yield_sesame:         v('q29'),
+    yield_sorghum:        v('q30'),
+    yield_groundnut:      v('q31'),
+    yield_cotton:         v('q32'),
+    yield_watermelon:     v('q33'),
+    yield_millet:         v('q34'),
+    yield_sunflower:      v('q35'),
+    finance_source:       FINANCE_HOW[d.q36] || 'لا ينطبق',
+    other_finance:        v('q37'),
+    finance_amount:       d.q38 ? d.q38.replace(/,|،/g, '') : 'لا ينطبق',
+    repaid:               d.q39 ? (isYes(d.q39) ? 'نعم' : 'لا') : 'لا ينطبق',
+    no_repay_reason:      NO_REPAY[d.q40] || 'لا ينطبق',
+    other_repay_reason:   v('q41'),
+    finance_use:          d.q42 ? lookup(FINANCE_USE, d.q42) : 'لا ينطبق',
+    finance_bank:         BANKS[d.q43] || 'لا ينطبق',
+    other_finance_bank:   v('q44'),
+    preferred_crops:      d.q45 ? lookup(CROPS, d.q45) : 'لا ينطبق',
+    crop_reason:          d.q46 ? lookup(CROP_REASON, d.q46) : 'لا ينطبق',
+    other_crop_reason:    v('q47'),
+    finance_crop:         CROPS[d.q48] || 'لا ينطبق',
+    seed_variety:         (() => {
       const varieties = getVarieties(d.q48 || '')
       return varieties[parseInt(d.q49)-1] || d.q49 || 'لا ينطبق'
     })(),
-    other_variety:      v('q50'),
-    use_fertiliser:     d.q51 ? (isYes(d.q51) ? 'نعم' : 'لا') : 'لا ينطبق',
+    other_variety:        v('q50'),
+    use_fertiliser:       d.q51 ? (isYes(d.q51) ? 'نعم' : 'لا') : 'لا ينطبق',
     no_fertiliser_reason: d.q52 ? lookup(NO_INPUT_REASON, d.q52) : 'لا ينطبق',
     other_no_fertiliser:  v('q53'),
-    use_pesticides:     d.q54 ? (isYes(d.q54) ? 'نعم' : 'لا') : 'لا ينطبق',
+    use_pesticides:       d.q54 ? (isYes(d.q54) ? 'نعم' : 'لا') : 'لا ينطبق',
     no_pesticides_reason: d.q55 ? lookup(NO_INPUT_REASON, d.q55) : 'لا ينطبق',
     other_no_pesticides:  v('q56'),
-    requested_amount:   d.q57 ? d.q57.replace(/,|،/g, '') : 'لا ينطبق',
-    marital_status:     MARITAL[d.q58] || 'لا ينطبق',
-    wives:              v('q59'),
-    has_children:       d.q60 ? (isYes(d.q60) ? 'نعم' : 'لا') : 'لا ينطبق',
-    total_children:     v('q61'),
-    children_under18:   v('q62'),
-    other_dependents:   d.q63 ? (isYes(d.q63) ? 'نعم' : 'لا') : 'لا ينطبق',
-    dependents_count:   v('q64'),
-    other_income:       d.q65 ? (isYes(d.q65) ? 'نعم' : 'لا') : 'لا ينطبق',
-    income_sources:     d.q66 ? lookup(INCOME_SRC, d.q66) : 'لا ينطبق',
-    remittances:        v('q67'),
-    consent:            d.q68 === '1' ? 'أقر وأوافق' : 'لا ينطبق',
-    timestamp:          new Date().toISOString()
+    requested_amount:     d.q57 ? d.q57.replace(/,|،/g, '') : 'لا ينطبق',
+    marital_status:       MARITAL[d.q58] || 'لا ينطبق',
+    wives:                v('q59'),
+    has_children:         d.q60 ? (isYes(d.q60) ? 'نعم' : 'لا') : 'لا ينطبق',
+    total_children:       v('q61'),
+    children_under18:     v('q62'),
+    other_dependents:     d.q63 ? (isYes(d.q63) ? 'نعم' : 'لا') : 'لا ينطبق',
+    dependents_count:     v('q64'),
+    other_income:         d.q65 ? (isYes(d.q65) ? 'نعم' : 'لا') : 'لا ينطبق',
+    income_sources:       d.q66 ? lookup(INCOME_SRC, d.q66) : 'لا ينطبق',
+    remittances:          v('q67'),
+    consent:              d.q68 === '1' ? 'أقر وأوافق' : 'لا ينطبق',
+    timestamp:            new Date().toISOString()
   }
 }
 
@@ -715,12 +713,10 @@ export default async function handler(req, res) {
     const phone = message.from
     if (isAlreadyProcessed(message.id)) continue
 
-    // Handle image messages for ID photo step
- if (message.type === 'image') {
-  console.log('Full image object:', JSON.stringify(message.image))
-  await handleMessage(phone, '__IMAGE__', message)
-  continue
-}
+    if (message.type === 'image') {
+      await handleMessage(phone, '__IMAGE__', message)
+      continue
+    }
 
     if (message.type !== 'text') {
       await sendWhatsApp(phone, 'يرجى الرد برسالة نصية فقط.')
@@ -740,7 +736,7 @@ async function handleMessage(phone, text, message = {}) {
   const session = await getSession(phone)
   if (session.completed) return
 
-  // ── Not greeted ──────────────────────────────────────────────────────────────
+  // ── Not greeted ───────────────────────────────────────────────────────────────
   if (!session.greeted) {
     session.greeted = true
     await saveSession(phone, session)
@@ -748,9 +744,11 @@ async function handleMessage(phone, text, message = {}) {
     return
   }
 
-  // ── Not started — wait for ١ ─────────────────────────────────────────────────
+  // ── Not started — wait for ١ ──────────────────────────────────────────────────
   if (!session.started) {
-    const normalized = text.replace(/[١٢٣٤٥٦٧٨٩٠]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    const normalized = text
+      .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      .trim()
     if (normalized === '1') {
       session.started = true
       session.step = 1
@@ -765,9 +763,11 @@ async function handleMessage(phone, text, message = {}) {
     return
   }
 
-  // ── Awaiting resume after reminder ──────────────────────────────────────────
+  // ── Awaiting resume after reminder ───────────────────────────────────────────
   if (session.awaiting_resume) {
-    const normalized = text.replace(/[١٢٣٤٥٦٧٨٩٠]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    const normalized = text
+      .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+      .trim()
     if (normalized === '2') {
       session.awaiting_resume = false
       session.last_activity = Date.now()
@@ -781,65 +781,67 @@ async function handleMessage(phone, text, message = {}) {
     return
   }
 
-if (session.step === 8) {
-  if (text !== '__IMAGE__') {
-    await sendWhatsApp(phone, 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.')
+  // ── ID photo step ─────────────────────────────────────────────────────────────
+  if (session.step === 8) {
+    if (text !== '__IMAGE__') {
+      await sendWhatsApp(phone, 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.')
+      return
+    }
+
+    const mediaId  = message.image?.id
+    const mediaUrl = message.image?.url
+
+    if (!mediaId || !mediaUrl) {
+      await sendWhatsApp(phone, 'لم نتمكن من استلام الصورة. يرجى المحاولة مرة أخرى.')
+      return
+    }
+
+    await sendWhatsApp(phone, 'جارٍ التحقق من الصورة...')
+
+    const media = await downloadMedia(mediaId, mediaUrl)
+    if (!media) {
+      await sendWhatsApp(phone, 'تعذر تحميل الصورة. يرجى إرسالها مرة أخرى.')
+      return
+    }
+
+    const result = await verifyNationalId(media.base64, media.mimeType)
+
+    if (!result.is_valid_id) {
+      await sendWhatsApp(phone,
+        `❌ لم نتمكن من التحقق من الصورة.\n${result.reason || 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.'}\n\nأرسل الصورة مرة أخرى.`
+      )
+      return
+    }
+
+    // Upload to Firebase Storage
+    const photoUrl = await uploadIdPhoto(media.base64, media.mimeType, phone)
+
+    session.data.q8 = photoUrl || mediaId   // Firebase Storage URL or fallback
+    session.data.q7 = result.id_number || ''  // extracted by Claude
+    session.last_activity = Date.now()
+    session.step = 9
+
+    const confirmMsg = result.id_number
+      ? `✅ تم التحقق من الهوية بنجاح.\nرقم الهوية: ${result.id_number}`
+      : `✅ تم التحقق من الهوية بنجاح.`
+
+    await sendWhatsApp(phone, confirmMsg)
+    await Promise.all([
+      saveSession(phone, session),
+      sendWhatsApp(phone, getQuestion(9, session.data))
+    ])
     return
   }
 
-  const mediaId  = message.image?.id
-  const mediaUrl = message.image?.url
-
-  if (!mediaId || !mediaUrl) {
-    await sendWhatsApp(phone, 'لم نتمكن من استلام الصورة. يرجى المحاولة مرة أخرى.')
-    return
-  }
-
-  // Let user know we're processing
-  await sendWhatsApp(phone, 'جارٍ التحقق من الصورة...')
-
-  // Download image
-  const media = await downloadMedia(mediaId, mediaUrl)
-  if (!media) {
-    await sendWhatsApp(phone, 'تعذر تحميل الصورة. يرجى إرسالها مرة أخرى.')
-    return
-  }
-
-  // Verify with Claude
-  const result = await verifyNationalId(media.base64, media.mimeType)
-
-  if (!result.is_valid_id) {
-    await sendWhatsApp(phone,
-      `❌ لم نتمكن من التحقق من الصورة.\n${result.reason || 'يرجى إرسال صورة واضحة لبطاقة إثبات الشخصية.'}\n\nأرسل الصورة مرة أخرى.`
-    )
-    return
-  }
-
- // Valid ID — upload to Firebase Storage
-const photoUrl = await uploadIdPhoto(media.base64, media.mimeType, phone)
-
-session.data.q8  = photoUrl || mediaId   // URL if uploaded, fallback to mediaId
-session.data.q7  = result.id_number || session.data.q7 || ''
-session.last_activity = Date.now()
-session.step = 9
-
-const confirmMsg = result.id_number
-  ? `✅ تم التحقق من الهوية بنجاح.\nرقم الهوية: ${result.id_number}`
-  : `✅ تم التحقق من الهوية بنجاح.`
-
-await sendWhatsApp(phone, confirmMsg)
-await Promise.all([
-  saveSession(phone, session),
-  sendWhatsApp(phone, getQuestion(9, session.data))
-])
-return
-}
-  // ── Normalize Arabic numerals for all inputs ─────────────────────────────────
+  // ── Normalize Arabic numerals ─────────────────────────────────────────────────
   const normalizedText = text
     .replace(/[٠-٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
     .replace(/،/g, ',')
+    .trim()
 
-  // ── Validate ─────────────────────────────────────────────────────────────────
+  if (!normalizedText) return
+
+  // ── Validate ──────────────────────────────────────────────────────────────────
   const error = validateAnswer(session.step, normalizedText, session.data)
   if (error) {
     await sendWhatsApp(phone, error)
@@ -850,7 +852,7 @@ return
   session.last_activity = Date.now()
   const nextStep = getNextStep(session.step, normalizedText, session.data)
 
-  // ── Completed ────────────────────────────────────────────────────────────────
+  // ── Completed ─────────────────────────────────────────────────────────────────
   if (nextStep > TOTAL_STEPS) {
     const row = buildRow(phone, session.data)
 
